@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="학생부 AI 앱 아이콘">
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <path d="M138 134h236c18 0 32 14 32 32v212c0 18-14 32-32 32H138c-18 0-32-14-32-32V166c0-18 14-32 32-32Z" fill="#eff6ff"/>
+  <path d="M162 190h188M162 238h148M162 286h188M162 334h116" stroke="#1d4ed8" stroke-width="24" stroke-linecap="round"/>
+  <path d="M356 310l20 20 42-54" stroke="#059669" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
