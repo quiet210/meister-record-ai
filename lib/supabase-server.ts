@@ -17,5 +17,5 @@ export function createSupabaseServiceClient() {
 }
 
 export function getSchoolId() {
-  return process.env.DEFAULT_SCHOOL_ID || "demo-school";
+  return process.env.DEFAULT_SCHOOL_ID || process.env.NEXT_PUBLIC_DEFAULT_SCHOOL_ID || "demo-school";
 }
