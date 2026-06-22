@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { gradeOptions } from "@/lib/options";
-import { readStoredStudents } from "@/lib/students";
+import { saveRecordDraft } from "@/lib/record-drafts";
+import { listStudents } from "@/lib/students";
 import type { CommentLength, CommentMode, Department, GenerateResponse, RecordFormPayload, Student } from "@/lib/types";
 import { DesktopRecordComposer } from "@/components/DesktopRecordComposer";
 import { MobileRecordStepper } from "@/components/MobileRecordStepper";
@@ -63,11 +64,9 @@ export type RecordComposerViewProps = {
   setLengthOption: (option: CommentLength) => void;
   generateDraft: () => Promise<void>;
   copyDraft: () => Promise<void>;
-  saveDraft: () => void;
+  saveDraft: () => Promise<void>;
   resetInputs: () => void;
 };
-
-const storageKey = "industrial-student-record-ai:records";
 
 function modeConfig(mode: CommentMode): RecordComposerConfig {
   if (mode === "subject") {
@@ -111,14 +110,28 @@ export function RecordComposer({ mode }: RecordComposerProps) {
   const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
-    const storedStudents = readStoredStudents();
-    setStudents(storedStudents);
-    if (storedStudents[0]) {
-      setSelectedStudentId(storedStudents[0].id);
-      setGrade(storedStudents[0].grade);
-      setDepartment(storedStudents[0].department);
-      setClassName(storedStudents[0].className);
+    let isMounted = true;
+
+    async function loadStudents() {
+      const result = await listStudents();
+      if (!isMounted) return;
+
+      setStudents(result.students);
+      if (result.students[0]) {
+        setSelectedStudentId((current) => current || result.students[0].id);
+        setGrade(result.students[0].grade);
+        setDepartment(result.students[0].department);
+        setClassName(result.students[0].className);
+      }
     }
+
+    loadStudents();
+    window.addEventListener("student-record-ai:students-changed", loadStudents);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("student-record-ai:students-changed", loadStudents);
+    };
   }, []);
 
   const selectedStudent = useMemo(
@@ -220,23 +233,16 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     setSavedMessage("초안을 클립보드에 복사했습니다.");
   }
 
-  function saveDraft() {
+  async function saveDraft() {
     if (!result?.draft) return;
-    const raw = window.localStorage.getItem(storageKey);
-    const previous = raw ? JSON.parse(raw) : [];
-    const next = [
-      {
-        id: crypto.randomUUID(),
-        mode,
-        student: selectedStudent,
-        payload: buildPayload(),
-        result,
-        createdAt: new Date().toISOString()
-      },
-      ...previous
-    ];
-    window.localStorage.setItem(storageKey, JSON.stringify(next));
-    setSavedMessage("작성 기록을 이 브라우저에 저장했습니다.");
+    const saveResult = await saveRecordDraft({
+      mode,
+      studentId: selectedStudent?.id,
+      payload: buildPayload(),
+      result
+    });
+
+    setSavedMessage(saveResult.error ? `저장 실패: ${saveResult.error}` : "작성 기록을 Supabase에 저장했습니다.");
   }
 
   const activeMemo = mode === "subject" ? observationMemo : homeroomMemo;

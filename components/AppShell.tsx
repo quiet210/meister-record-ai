@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { BookOpenCheck, ClipboardList, Database, Home, LogOut, PenLine, UsersRound } from "lucide-react";
+import { BookOpenCheck, ClipboardList, Database, Home, PenLine, UsersRound } from "lucide-react";
+import { LogoutButton } from "@/components/LogoutButton";
 
 const navItems = [
   { href: "/dashboard", label: "대시보드", icon: Home },
@@ -20,13 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
             <span className="truncate text-sm font-bold text-slate-900 lg:text-base">실습기록 AI 학생부 도우미</span>
           </Link>
-          <Link
-            href="/login"
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            <LogOut size={16} aria-hidden="true" />
-            <span className="hidden sm:inline">로그아웃</span>
-          </Link>
+          <LogoutButton />
         </div>
       </header>
 
