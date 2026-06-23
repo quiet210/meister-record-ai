@@ -3,16 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import {
-  activityTypeOptions,
   behaviorImprovementOptions,
-  competencyOptions,
   commentLengthOptions,
-  departmentOptions,
   gradeOptions,
-  improvementOptions,
-  industrialAttitudeOptions,
-  schoolLifeAreaOptions,
-  subjectOptions
+  improvementOptions
 } from "@/lib/options";
 import type { CommentLength, Department } from "@/lib/types";
 import type { RecordComposerViewProps } from "@/components/RecordComposer";
@@ -177,7 +171,7 @@ function BasicInfoStep(props: RecordComposerViewProps) {
           <label className="space-y-2">
             <span className="field-label">학과</span>
             <select className="input-base" value={props.department} onChange={(event) => props.setDepartment(event.target.value as Department)}>
-              {departmentOptions.map((option) => (
+              {props.settingsOptions.departmentOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -194,7 +188,7 @@ function BasicInfoStep(props: RecordComposerViewProps) {
               onChange={(event) => props.setSubjectName(event.target.value)}
             />
             <datalist id="subject-options-mobile">
-              {subjectOptions.map((option) => (
+              {props.settingsOptions.subjectOptions.map((option) => (
                 <option key={option} value={option} />
               ))}
             </datalist>
@@ -224,8 +218,13 @@ function SelectionStep(props: RecordComposerViewProps) {
   if (props.mode === "subject") {
     return (
       <section className="panel space-y-5 p-4">
-        <SelectableChipGroup label="활동 유형" options={activityTypeOptions} values={props.activityTypes} onChange={props.setActivityTypes} compact />
-        <SelectableChipGroup label="역량" options={competencyOptions} values={props.competencies} onChange={props.setCompetencies} compact />
+        {props.settingsOptions.subjectChecklistGroups.map((group) =>
+          group.key === "subject_activity_type" ? (
+            <SelectableChipGroup key={group.key} label={group.label} options={group.options} values={props.activityTypes} onChange={props.setActivityTypes} compact />
+          ) : (
+            <SelectableChipGroup key={group.key} label={group.label} options={group.options} values={props.competencies} onChange={props.setCompetencies} compact />
+          )
+        )}
         <SelectableChipGroup label="보완점" options={improvementOptions} values={props.improvements} onChange={props.setImprovements} compact />
       </section>
     );
@@ -233,14 +232,19 @@ function SelectionStep(props: RecordComposerViewProps) {
 
   return (
     <section className="panel space-y-5 p-4">
-      <SelectableChipGroup label="학교생활 영역" options={schoolLifeAreaOptions} values={props.schoolLifeAreas} onChange={props.setSchoolLifeAreas} compact />
-      <SelectableChipGroup
-        label="공업계 특화 생활태도"
-        options={industrialAttitudeOptions}
-        values={props.industrialAttitudes}
-        onChange={props.setIndustrialAttitudes}
-        compact
-      />
+      {props.settingsOptions.behaviorSchoolLifeChecklistGroups.map((group) => (
+        <SelectableChipGroup key={group.key} label={group.label} options={group.options} values={props.schoolLifeAreas} onChange={props.setSchoolLifeAreas} compact />
+      ))}
+      {props.settingsOptions.behaviorIndustrialChecklistGroups.map((group) => (
+        <SelectableChipGroup
+          key={group.key}
+          label={group.label}
+          options={group.options}
+          values={props.industrialAttitudes}
+          onChange={props.setIndustrialAttitudes}
+          compact
+        />
+      ))}
       <SelectableChipGroup label="보완할 점" options={behaviorImprovementOptions} values={props.behaviorImprovements} onChange={props.setBehaviorImprovements} compact />
       <fieldset className="space-y-3">
         <legend className="field-label">분량 선택</legend>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { gradeOptions } from "@/lib/options";
+import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
 import { saveRecordDraft } from "@/lib/record-drafts";
 import { listStudents } from "@/lib/students";
 import type { CommentLength, CommentMode, Department, GenerateResponse, RecordFormPayload, Student } from "@/lib/types";
@@ -22,6 +23,7 @@ type RecordComposerConfig = {
 export type RecordComposerViewProps = {
   mode: CommentMode;
   config: RecordComposerConfig;
+  settingsOptions: SettingsOptions;
   students: Student[];
   selectedStudentId: string;
   selectedStudent?: Student;
@@ -88,6 +90,7 @@ function modeConfig(mode: CommentMode): RecordComposerConfig {
 
 export function RecordComposer({ mode }: RecordComposerProps) {
   const config = modeConfig(mode);
+  const [settingsOptions, setSettingsOptions] = useState<SettingsOptions>(getFallbackSettingsOptions());
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [grade, setGrade] = useState<(typeof gradeOptions)[number]>("1학년");
@@ -112,6 +115,17 @@ export function RecordComposer({ mode }: RecordComposerProps) {
   useEffect(() => {
     let isMounted = true;
 
+    async function loadSettings() {
+      const options = await loadSettingsOptions();
+      if (!isMounted) return;
+
+      setSettingsOptions(options);
+      setDepartment((current) => {
+        if (options.departmentOptions.some((option) => option.value === current)) return current;
+        return options.departmentOptions[0]?.value || current;
+      });
+    }
+
     async function loadStudents() {
       const result = await listStudents();
       if (!isMounted) return;
@@ -125,6 +139,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       }
     }
 
+    loadSettings();
     loadStudents();
     window.addEventListener("student-record-ai:students-changed", loadStudents);
 
@@ -255,6 +270,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
   const viewProps: RecordComposerViewProps = {
     mode,
     config,
+    settingsOptions,
     students,
     selectedStudentId,
     selectedStudent,

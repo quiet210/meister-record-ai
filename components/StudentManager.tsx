@@ -2,29 +2,32 @@
 
 import { useEffect, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2, UsersRound, X } from "lucide-react";
-import { departmentOptions, gradeOptions } from "@/lib/options";
+import { getFallbackSettingsOptions, loadSettingsOptions, type DepartmentOption } from "@/lib/admin-settings";
+import { gradeOptions } from "@/lib/options";
 import { createStudent, deleteStudent, listStudents, updateStudent, type StudentInput } from "@/lib/students";
 import type { Department, Student } from "@/lib/types";
-
-function departmentLabel(value: Department) {
-  return departmentOptions.find((option) => option.value === value)?.label || value;
-}
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
 }
 
-const emptyForm: StudentInput = {
-  name: "",
-  grade: "1학년",
-  department: "materials",
-  className: "",
-  number: ""
-};
+const fallbackSettings = getFallbackSettingsOptions();
+const fallbackDepartment = fallbackSettings.departmentOptions[0]?.value || "materials";
+
+function makeEmptyForm(department: Department = fallbackDepartment): StudentInput {
+  return {
+    name: "",
+    grade: "1학년",
+    department,
+    className: "",
+    number: ""
+  };
+}
 
 export function StudentManager() {
   const [students, setStudents] = useState<Student[]>([]);
-  const [form, setForm] = useState<StudentInput>(emptyForm);
+  const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>(fallbackSettings.departmentOptions);
+  const [form, setForm] = useState<StudentInput>(makeEmptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -32,8 +35,25 @@ export function StudentManager() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    loadSettings();
     loadStudents();
   }, []);
+
+  async function loadSettings() {
+    const settings = await loadSettingsOptions();
+    setDepartmentOptions(settings.departmentOptions);
+    setForm((current) => {
+      if (settings.departmentOptions.some((option) => option.value === current.department)) return current;
+      return {
+        ...current,
+        department: settings.departmentOptions[0]?.value || current.department
+      };
+    });
+  }
+
+  function departmentLabel(value: Department) {
+    return departmentOptions.find((option) => option.value === value)?.label || value;
+  }
 
   async function loadStudents() {
     setIsLoading(true);
@@ -63,7 +83,7 @@ export function StudentManager() {
   }
 
   function resetForm() {
-    setForm(emptyForm);
+    setForm(makeEmptyForm(departmentOptions[0]?.value));
     setEditingId(null);
     setMessage("");
     setError("");
@@ -97,7 +117,7 @@ export function StudentManager() {
 
       const refreshError = await loadStudents();
       window.dispatchEvent(new Event("student-record-ai:students-changed"));
-      setForm(emptyForm);
+      setForm(makeEmptyForm(departmentOptions[0]?.value));
       setEditingId(null);
       if (refreshError) {
         setError(`학생 저장은 완료됐지만 목록을 다시 불러오지 못했습니다. ${refreshError}`);

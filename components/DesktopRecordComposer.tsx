@@ -2,16 +2,10 @@
 
 import { Loader2, Sparkles } from "lucide-react";
 import {
-  activityTypeOptions,
   behaviorImprovementOptions,
-  competencyOptions,
   commentLengthOptions,
-  departmentOptions,
   gradeOptions,
-  improvementOptions,
-  industrialAttitudeOptions,
-  schoolLifeAreaOptions,
-  subjectOptions
+  improvementOptions
 } from "@/lib/options";
 import type { CommentLength, Department } from "@/lib/types";
 import type { RecordComposerViewProps } from "@/components/RecordComposer";
@@ -20,6 +14,7 @@ import { SelectableChipGroup } from "@/components/SelectableChipGroup";
 
 export function DesktopRecordComposer(props: RecordComposerViewProps) {
   const { mode, config } = props;
+  const { settingsOptions } = props;
 
   return (
     <div className="mx-auto hidden max-w-7xl space-y-6 lg:block">
@@ -76,7 +71,7 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
                   <label className="space-y-2">
                     <span className="field-label">학과</span>
                     <select className="input-base" value={props.department} onChange={(event) => props.setDepartment(event.target.value as Department)}>
-                      {departmentOptions.map((option) => (
+                      {settingsOptions.departmentOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -94,7 +89,7 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
                       onChange={(event) => props.setSubjectName(event.target.value)}
                     />
                     <datalist id="subject-options-desktop">
-                      {subjectOptions.map((option) => (
+                      {settingsOptions.subjectOptions.map((option) => (
                         <option key={option} value={option} />
                       ))}
                     </datalist>
@@ -134,20 +129,30 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
             <div className="mt-5 space-y-6">
               {mode === "subject" ? (
                 <>
-                  <SelectableChipGroup label="활동 유형" options={activityTypeOptions} values={props.activityTypes} onChange={props.setActivityTypes} compact />
-                  <SelectableChipGroup label="역량" options={competencyOptions} values={props.competencies} onChange={props.setCompetencies} compact />
+                  {settingsOptions.subjectChecklistGroups.map((group) =>
+                    group.key === "subject_activity_type" ? (
+                      <SelectableChipGroup key={group.key} label={group.label} options={group.options} values={props.activityTypes} onChange={props.setActivityTypes} compact />
+                    ) : (
+                      <SelectableChipGroup key={group.key} label={group.label} options={group.options} values={props.competencies} onChange={props.setCompetencies} compact />
+                    )
+                  )}
                   <SelectableChipGroup label="보완점" options={improvementOptions} values={props.improvements} onChange={props.setImprovements} compact />
                 </>
               ) : (
                 <>
-                  <SelectableChipGroup label="학교생활 영역" options={schoolLifeAreaOptions} values={props.schoolLifeAreas} onChange={props.setSchoolLifeAreas} compact />
-                  <SelectableChipGroup
-                    label="공업계 특화 생활태도"
-                    options={industrialAttitudeOptions}
-                    values={props.industrialAttitudes}
-                    onChange={props.setIndustrialAttitudes}
-                    compact
-                  />
+                  {settingsOptions.behaviorSchoolLifeChecklistGroups.map((group) => (
+                    <SelectableChipGroup key={group.key} label={group.label} options={group.options} values={props.schoolLifeAreas} onChange={props.setSchoolLifeAreas} compact />
+                  ))}
+                  {settingsOptions.behaviorIndustrialChecklistGroups.map((group) => (
+                    <SelectableChipGroup
+                      key={group.key}
+                      label={group.label}
+                      options={group.options}
+                      values={props.industrialAttitudes}
+                      onChange={props.setIndustrialAttitudes}
+                      compact
+                    />
+                  ))}
                   <SelectableChipGroup
                     label="보완할 점"
                     options={behaviorImprovementOptions}

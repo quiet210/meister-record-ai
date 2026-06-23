@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileUp, Loader2, ShieldCheck } from "lucide-react";
-import { departmentOptions, documentTypeOptions, gradeOptions, subjectOptions } from "@/lib/options";
+import { getFallbackSettingsOptions, loadSettingsOptions } from "@/lib/admin-settings";
+import { documentTypeOptions, gradeOptions } from "@/lib/options";
 import type { Department, KnowledgeDocumentType } from "@/lib/types";
 
 type UploadResult = {
@@ -15,14 +16,39 @@ type UploadResult = {
 };
 
 export function KnowledgeUpload() {
+  const fallbackSettings = getFallbackSettingsOptions();
+  const [departmentOptions, setDepartmentOptions] = useState(fallbackSettings.departmentOptions);
+  const [subjectOptions, setSubjectOptions] = useState<string[]>(fallbackSettings.subjectOptions);
   const [file, setFile] = useState<File | null>(null);
   const [grade, setGrade] = useState<(typeof gradeOptions)[number]>("1학년");
-  const [department, setDepartment] = useState<Department>("materials");
+  const [department, setDepartment] = useState<Department>(fallbackSettings.departmentOptions[0]?.value || "materials");
   const [subjectName, setSubjectName] = useState("");
   const [unitTitle, setUnitTitle] = useState("");
   const [documentType, setDocumentType] = useState<KnowledgeDocumentType>("learning_goal");
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSettings() {
+      const settings = await loadSettingsOptions();
+      if (!isMounted) return;
+
+      setDepartmentOptions(settings.departmentOptions);
+      setSubjectOptions(settings.subjectOptions);
+      setDepartment((current) => {
+        if (settings.departmentOptions.some((option) => option.value === current)) return current;
+        return settings.departmentOptions[0]?.value || current;
+      });
+    }
+
+    loadSettings();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   async function uploadKnowledgeFile() {
     if (!file) return;

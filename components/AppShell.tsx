@@ -1,6 +1,10 @@
+"use client";
+
 import Link from "next/link";
-import { BookOpenCheck, ClipboardList, Database, Home, PenLine, UsersRound } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { BookOpenCheck, ClipboardList, Database, Home, PenLine, Settings, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
+import { ensureUserProfile } from "@/lib/students";
 
 const navItems = [
   { href: "/dashboard", label: "대시보드", icon: Home },
@@ -10,7 +14,25 @@ const navItems = [
   { href: "/students", label: "학생 관리", icon: UsersRound }
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+const adminNavItem = { href: "/admin", label: "관리", icon: Settings };
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const visibleNavItems = isAdmin ? [...navItems, adminNavItem] : navItems;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    ensureUserProfile().then((result) => {
+      if (!isMounted) return;
+      setIsAdmin(result.profile?.role === "admin");
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20 text-slate-950 lg:pb-0">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -28,7 +50,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-5 lg:grid-cols-[220px_1fr] lg:px-6 lg:py-6">
         <aside className="hidden lg:block">
           <nav className="sticky top-20 space-y-1">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               return (
                 <Link
@@ -46,8 +68,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main>{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white lg:hidden">
-        {navItems.map((item) => {
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 grid border-t border-slate-200 bg-white lg:hidden"
+        style={{ gridTemplateColumns: `repeat(${visibleNavItems.length}, minmax(0, 1fr))` }}
+      >
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           return (
             <Link key={item.href} href={item.href} className="flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-slate-600">
