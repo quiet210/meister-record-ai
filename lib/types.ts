@@ -1,4 +1,4 @@
-export type Department = "materials" | "automation_machine" | "electrical_electronic_control";
+export type Department = string;
 
 export type Student = {
   id: string;
