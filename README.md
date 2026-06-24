@@ -23,6 +23,7 @@
 
 - 회원가입/로그인
 - 학생 관리
+- 학생 엑셀 양식 다운로드
 - 과세특 생성
 - 행동특성 생성
 - 관리자 기능
@@ -37,7 +38,7 @@
 
 - `/login`: Supabase Auth 로그인/회원가입
 - `/dashboard`: 주요 작업 진입 대시보드
-- `/students`: 학생 관리
+- `/students`: 학생 관리 및 학생 엑셀 양식 다운로드
 - `/subject-comment`: 과세특 생성
 - `/behavior-comment`: 행동특성 및 종합의견 생성
 - `/knowledge`: 지식베이스 문서 업로드

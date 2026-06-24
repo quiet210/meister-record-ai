@@ -13,6 +13,7 @@
 - Vercel 배포 완료
 - Supabase Auth 완료
 - 학생 CRUD 완료
+- 학생 엑셀 양식 다운로드 기능 추가
 - `public.students` 저장 성공 확인
 - 관리자 권한 기능 완료
 - 관리자 페이지 완료
@@ -44,6 +45,7 @@
 - 학생 삭제
 - 학생 추가/수정 후 Supabase 기준 목록 재조회
 - 학생 삭제 후 화면 목록 갱신
+- 학생 엑셀 양식 다운로드
 - `school_id` 기준 데이터 분리
 - `public.students` 실제 저장 성공 확인
 
@@ -192,6 +194,9 @@ supabase/migrations/20260622_admin_settings.sql
 - `settingsOptions` 타입 오류
   - `RecordComposerViewProps`에 `settingsOptions`를 명시하고, `RecordComposer.tsx`에서 `viewProps` 생성 시 항상 포함하도록 수정했다.
   - DB 로딩 전 또는 DB 데이터가 없을 때 `getFallbackSettingsOptions()`를 통해 기존 `options.ts` 상수를 사용하도록 정리했다.
+- 학생 엑셀 양식 다운로드 기능 추가
+  - `/students` 화면의 학생 엑셀 업로드 영역에 `student-upload-template.xlsx` 다운로드 버튼을 추가했다.
+  - 첫 번째 시트명은 `학생업로드양식`이며, 이름/학년/학과/반/번호/성별/비고 헤더와 예시 행을 포함한다.
 
 ## 주요 파일
 
@@ -212,6 +217,7 @@ Auth/Supabase:
 학생 관리:
 
 - `components/StudentManager.tsx`
+- `lib/student-template.ts`
 - `app/students/page.tsx`
 
 작성 화면:
