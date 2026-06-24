@@ -8,7 +8,7 @@
 
 - 과세특 작성: 과목, 단원, 활동유형, 역량 키워드, 교사 관찰 메모를 바탕으로 교과 세부능력 및 특기사항 초안을 생성합니다.
 - 행동특성 및 종합의견 작성: 생활태도, 협업, 리더십, 책임감, 안전의식, 직업윤리 관련 체크리스트와 담임 관찰 메모를 바탕으로 초안을 생성합니다.
-- 관리자 설정 기능: 학교별 학과명, 과목명, 과세특/행동특성 체크리스트를 관리자 화면에서 관리합니다.
+- 관리자 설정 기능: 학교별 학과명, 과목명, 교과목/성취기준, 과세특/행동특성 체크리스트를 관리자 화면에서 관리합니다.
 
 ## 기술 스택
 
@@ -23,28 +23,52 @@
 
 - 회원가입/로그인
 - 학생 관리
+- 학생 엑셀 업로드
 - 학생 엑셀 양식 다운로드
 - 과세특 생성
 - 행동특성 생성
 - 관리자 기능
 - 학과 관리
 - 과목 관리
+- 교과목/성취기준 관리
+- 성취기준 엑셀 업로드
+- 성취기준 엑셀 양식 다운로드
 - 체크리스트 관리
 - Supabase 기반 학생부 초안 저장
 - PDF/DOCX/TXT/CSV 지식베이스 업로드 준비
 - OpenAI Vector Store 기반 RAG 구조 준비
 
+## 현재 완료 상태
+
+- GitHub 연동 완료
+- Vercel 배포 완료
+- Supabase Auth 완료
+- 학생 CRUD 완료
+- `public.students` 테이블 저장 성공
+- 관리자 권한 `role` 기능 완료
+- 관리자 페이지 `/admin` 완료
+- 학과 관리 완료
+- 과목 관리 완료
+- 교과목/성취기준 관리 완료
+- 체크리스트 관리 완료
+- 관리자 설정은 DB 값을 우선 사용하고, DB 데이터가 없거나 로딩 전이면 `lib/options.ts` 상수를 fallback으로 사용
+- 학생 엑셀 업로드 완료
+- 학생 엑셀 양식 다운로드 완료
+- 성취기준 엑셀 업로드 완료
+- 성취기준 엑셀 양식 다운로드 완료
+
 ## 주요 화면
 
 - `/login`: Supabase Auth 로그인/회원가입
 - `/dashboard`: 주요 작업 진입 대시보드
-- `/students`: 학생 관리 및 학생 엑셀 양식 다운로드
+- `/students`: 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드
 - `/subject-comment`: 과세특 생성
 - `/behavior-comment`: 행동특성 및 종합의견 생성
 - `/knowledge`: 지식베이스 문서 업로드
 - `/admin`: 관리자 설정 홈
 - `/admin/departments`: 학과 관리
 - `/admin/subjects`: 과목 관리
+- `/admin/curriculum`: 교과목/성취기준 관리, 성취기준 엑셀 업로드
 - `/admin/checklists`: 체크리스트 관리
 
 ## 실행 방법
@@ -129,6 +153,8 @@ GitHub: https://github.com/quiet210/meister-record-ai
 - `public.record_drafts`: 생성된 과세특/행동특성 초안 저장 테이블입니다.
 - `public.departments`: 학교별 학과 설정입니다.
 - `public.subjects`: 학교별 과목 설정입니다.
+- `public.curriculum_subjects`: 학교 공통 교과목과 교과유형을 저장합니다.
+- `public.curriculum_standards`: 과목별 성취기준, 단원명, 핵심키워드, 중복 처리 상태를 저장합니다.
 - `public.checklist_categories`: 체크리스트 분류입니다.
 - `public.checklist_items`: 체크리스트 항목입니다.
 
@@ -137,12 +163,14 @@ GitHub: https://github.com/quiet210/meister-record-ai
 ```bash
 supabase/migrations/20260622_auth_students.sql
 supabase/migrations/20260622_admin_settings.sql
+supabase/migrations/20260624_curriculum.sql
 ```
 
 권한 구조:
 
 - `teacher`: 학생 관리, 과세특 생성, 행동특성 생성 기능을 사용합니다.
-- `admin`: teacher 기능에 더해 `/admin`, `/admin/departments`, `/admin/subjects`, `/admin/checklists`에 접근해 학교별 설정을 관리합니다.
+- `admin`: teacher 기능에 더해 `/admin`, `/admin/departments`, `/admin/subjects`, `/admin/curriculum`, `/admin/checklists`에 접근해 학교별 설정을 관리합니다.
+- 성취기준 업로드는 `teacher`와 `admin` 모두 가능하며, 교과목 생성/수정/삭제는 `admin`만 가능합니다.
 
 관리자 계정 승격 예시:
 
@@ -151,6 +179,18 @@ update public.users
 set role = 'admin'
 where email = 'admin@school.kr';
 ```
+
+## 다음 작업 후보
+
+다음 우선순위는 과세특 생성 시 성취기준을 연결하는 작업입니다.
+
+- 교과서 PDF 업로드는 파일 용량과 저작권 문제 때문에 제외합니다.
+- 성취기준 업로드 엑셀 컬럼은 `과목명`, `교과유형`, `단원명`, `성취기준`, `핵심키워드`입니다.
+- `교과유형`은 `일반교과`, `NCS교과`, `general`, `ncs`를 허용합니다.
+- 정확 중복 기준은 `school_id`, `subject_name`, `unit_name`, `achievement_standard`입니다.
+- 유사 중복은 성취기준 텍스트 정규화 후 includes 관계와 85% 이상 문자열 유사도로 감지합니다.
+- 성취기준 업로드 기능은 완료됐지만 아직 생성 AI 프롬프트에는 직접 반영되지 않습니다.
+- 다음 단계에서 과세특 생성 시 `subjectName` 기준으로 `curriculum_standards`를 검색하고 Gemini 프롬프트에 주입합니다.
 
 ## 개발 시 주의사항
 
