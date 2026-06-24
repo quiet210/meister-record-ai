@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardCheck, Factory, Settings, Tags } from "lucide-react";
+import { BookOpenText, ClipboardCheck, Factory, Settings, Tags } from "lucide-react";
 
 const adminLinks = [
   {
@@ -13,6 +13,12 @@ const adminLinks = [
     title: "과목 관리",
     description: "세특과 지식베이스 업로드에서 사용할 과목명을 관리합니다.",
     icon: Tags
+  },
+  {
+    href: "/admin/curriculum",
+    title: "교과목/성취기준 관리",
+    description: "학교 공통 교과목과 과목별 성취기준 엑셀 업로드를 관리합니다.",
+    icon: BookOpenText
   },
   {
     href: "/admin/checklists",
@@ -40,7 +46,7 @@ export function AdminHome() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {adminLinks.map((item) => {
           const Icon = item.icon;
           return (
