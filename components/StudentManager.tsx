@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileSpreadsheet, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, UsersRound, X } from "lucide-react";
+import { Download, FileSpreadsheet, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, UsersRound, X } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type DepartmentOption } from "@/lib/admin-settings";
 import { gradeOptions } from "@/lib/options";
+import { downloadStudentUploadTemplate } from "@/lib/student-template";
 import { createStudent, createStudents, deleteStudent, listStudents, updateStudent, type StudentInput } from "@/lib/students";
 import type { Department, Student } from "@/lib/types";
 
@@ -388,16 +389,25 @@ export function StudentManager() {
       </section>
 
       <section className="panel p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
-            <FileSpreadsheet size={20} aria-hidden="true" />
-          </span>
-          <div>
-            <h2 className="text-base font-bold text-slate-950">학생 엑셀 업로드</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              첫 번째 시트의 헤더는 이름, 학년, 학과, 반, 번호를 사용합니다. 학과는 관리자 화면의 학과명 또는 코드와 일치해야 합니다.
-            </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+              <FileSpreadsheet size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-slate-950">학생 엑셀 업로드</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                첫 번째 시트의 헤더는 이름, 학년, 학과, 반, 번호를 사용합니다. 학년은 1학년, 2학년, 3학년 또는 고1, 고2, 고3으로 입력할 수 있습니다.
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                학과명은 관리자 설정에 등록된 학과명 또는 코드와 일치해야 합니다.
+              </p>
+            </div>
           </div>
+          <button className="secondary-button w-full sm:w-auto" type="button" onClick={downloadStudentUploadTemplate}>
+            <Download size={18} aria-hidden="true" />
+            학생 엑셀 양식 다운로드
+          </button>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
