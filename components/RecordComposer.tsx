@@ -20,6 +20,8 @@ type RecordComposerConfig = {
   endpoint: string;
 };
 
+const fallbackSettingsOptions = getFallbackSettingsOptions();
+
 export type RecordComposerViewProps = {
   mode: CommentMode;
   config: RecordComposerConfig;
@@ -90,7 +92,7 @@ function modeConfig(mode: CommentMode): RecordComposerConfig {
 
 export function RecordComposer({ mode }: RecordComposerProps) {
   const config = modeConfig(mode);
-  const [settingsOptions, setSettingsOptions] = useState<SettingsOptions>(getFallbackSettingsOptions());
+  const [settingsOptions, setSettingsOptions] = useState<SettingsOptions>(() => fallbackSettingsOptions);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [grade, setGrade] = useState<(typeof gradeOptions)[number]>("1학년");
@@ -266,11 +268,12 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     mode === "subject"
       ? memoLength >= 10 && subjectName.trim().length > 0 && activityTypes.length > 0
       : memoLength >= 10 && className.trim().length > 0 && schoolLifeAreas.length > 0 && industrialAttitudes.length > 0;
+  const viewSettingsOptions = settingsOptions || fallbackSettingsOptions;
 
   const viewProps: RecordComposerViewProps = {
     mode,
     config,
-    settingsOptions,
+    settingsOptions: viewSettingsOptions,
     students,
     selectedStudentId,
     selectedStudent,
