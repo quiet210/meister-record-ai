@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Pencil, Plus, RefreshCw, Trash2, UsersRound, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { FileSpreadsheet, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, UsersRound, X } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type DepartmentOption } from "@/lib/admin-settings";
 import { gradeOptions } from "@/lib/options";
-import { createStudent, deleteStudent, listStudents, updateStudent, type StudentInput } from "@/lib/students";
+import { createStudent, createStudents, deleteStudent, listStudents, updateStudent, type StudentInput } from "@/lib/students";
 import type { Department, Student } from "@/lib/types";
 
 function getErrorMessage(error: unknown) {
@@ -13,6 +13,14 @@ function getErrorMessage(error: unknown) {
 
 const fallbackSettings = getFallbackSettingsOptions();
 const fallbackDepartment = fallbackSettings.departmentOptions[0]?.value || "materials";
+
+const excelColumnAliases = {
+  name: ["name", "studentname", "student", "이름", "학생명", "성명"],
+  grade: ["grade", "학년"],
+  department: ["department", "major", "학과", "전공", "계열"],
+  className: ["classname", "class", "class_name", "반", "학급"],
+  number: ["number", "no", "studentnumber", "student_number", "번호", "출석번호"]
+};
 
 function makeEmptyForm(department: Department = fallbackDepartment): StudentInput {
   return {
@@ -24,15 +32,116 @@ function makeEmptyForm(department: Department = fallbackDepartment): StudentInpu
   };
 }
 
+function normalizeHeader(value: string) {
+  return value.replace(/\s+/g, "").replace(/[_-]+/g, "").toLowerCase();
+}
+
+function cellToString(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function getRowValue(row: Record<string, unknown>, aliases: string[]) {
+  const normalizedAliases = aliases.map(normalizeHeader);
+  const entry = Object.entries(row).find(([key]) => normalizedAliases.includes(normalizeHeader(key)));
+  return entry ? cellToString(entry[1]) : "";
+}
+
+function normalizeGrade(value: string): Student["grade"] | null {
+  const compact = value.replace(/\s+/g, "");
+  if (["1", "1학년", "고1", "일학년"].includes(compact)) return "1학년";
+  if (["2", "2학년", "고2", "이학년"].includes(compact)) return "2학년";
+  if (["3", "3학년", "고3", "삼학년"].includes(compact)) return "3학년";
+  return null;
+}
+
+function normalizeDepartment(value: string, departmentOptions: DepartmentOption[]): Department | null {
+  const compact = normalizeHeader(value);
+  const option = departmentOptions.find((item) => normalizeHeader(item.value) === compact || normalizeHeader(item.label) === compact);
+  return option?.value || null;
+}
+
+async function parseStudentExcelFile(file: File, departmentOptions: DepartmentOption[]) {
+  const { read, utils } = await import("xlsx");
+  const buffer = await file.arrayBuffer();
+  const workbook = read(buffer, { type: "array" });
+  const firstSheetName = workbook.SheetNames[0];
+
+  if (!firstSheetName) {
+    return {
+      students: [],
+      errors: ["엑셀 파일에서 시트를 찾을 수 없습니다."],
+      warnings: []
+    };
+  }
+
+  const rows = utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheetName], {
+    defval: "",
+    raw: false
+  });
+  const students: StudentInput[] = [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  rows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    const name = getRowValue(row, excelColumnAliases.name);
+    const rawGrade = getRowValue(row, excelColumnAliases.grade);
+    const rawDepartment = getRowValue(row, excelColumnAliases.department);
+    const className = getRowValue(row, excelColumnAliases.className);
+    const number = getRowValue(row, excelColumnAliases.number);
+
+    if (![name, rawGrade, rawDepartment, className, number].some(Boolean)) return;
+
+    const grade = normalizeGrade(rawGrade);
+    const department = normalizeDepartment(rawDepartment, departmentOptions);
+
+    if (!name) errors.push(`${rowNumber}행: 이름이 없습니다.`);
+    if (!grade) errors.push(`${rowNumber}행: 학년은 1학년, 2학년, 3학년 중 하나여야 합니다.`);
+    if (!department) errors.push(`${rowNumber}행: 학과를 현재 학과 목록의 코드 또는 이름으로 입력하세요.`);
+
+    if (!name || !grade || !department) return;
+
+    students.push({
+      name,
+      grade,
+      department,
+      className,
+      number
+    });
+  });
+
+  if (rows.length === 0) {
+    errors.push("엑셀 첫 번째 시트에 학생 데이터가 없습니다.");
+  } else if (students.length === 0 && errors.length === 0) {
+    errors.push("업로드할 학생 행을 찾지 못했습니다. 첫 행의 헤더를 확인하세요.");
+  }
+
+  const missingOptionalFields = students.filter((student) => !student.className.trim() || !student.number.trim()).length;
+  if (missingOptionalFields > 0) {
+    warnings.push(`반 또는 번호가 빈 ${missingOptionalFields}개 행은 '-'로 저장됩니다.`);
+  }
+
+  return {
+    students,
+    errors,
+    warnings
+  };
+}
+
 export function StudentManager() {
   const [students, setStudents] = useState<Student[]>([]);
   const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>(fallbackSettings.departmentOptions);
   const [form, setForm] = useState<StudentInput>(makeEmptyForm());
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [uploadNotes, setUploadNotes] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingExcel, setIsUploadingExcel] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const excelInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -133,6 +242,51 @@ export function StudentManager() {
     }
   }
 
+  async function uploadStudentsFromExcel() {
+    if (!excelFile) return;
+
+    setIsUploadingExcel(true);
+    setMessage("");
+    setError("");
+    setUploadNotes([]);
+
+    try {
+      const parsed = await parseStudentExcelFile(excelFile, departmentOptions);
+      if (parsed.errors.length > 0) {
+        setError(`엑셀 업로드를 중단했습니다. ${parsed.errors.slice(0, 5).join(" ")}`);
+        setUploadNotes(parsed.errors.slice(5));
+        return;
+      }
+
+      const result = await createStudents(parsed.students);
+      if (result.error) {
+        console.error("[StudentManager] failed to upload students from excel", result.error);
+        setError(result.error);
+        return;
+      }
+
+      const refreshError = await loadStudents();
+      window.dispatchEvent(new Event("student-record-ai:students-changed"));
+      setExcelFile(null);
+      setUploadNotes(parsed.warnings);
+      if (excelInputRef.current) {
+        excelInputRef.current.value = "";
+      }
+
+      if (refreshError) {
+        setError(`학생 업로드는 완료됐지만 목록을 다시 불러오지 못했습니다. ${refreshError}`);
+        return;
+      }
+      setMessage(`${result.students.length}명의 학생을 엑셀에서 업로드했습니다.`);
+    } catch (uploadError) {
+      const errorMessage = getErrorMessage(uploadError);
+      console.error("[StudentManager] failed to upload students from excel", uploadError);
+      setError(errorMessage);
+    } finally {
+      setIsUploadingExcel(false);
+    }
+  }
+
   async function removeStudent(student: Student) {
     setIsSaving(true);
     setMessage("");
@@ -206,17 +360,17 @@ export function StudentManager() {
         </div>
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <button className="primary-button w-full sm:w-auto" type="button" onClick={submitStudent} disabled={!form.name.trim() || isSaving}>
+          <button className="primary-button w-full sm:w-auto" type="button" onClick={submitStudent} disabled={!form.name.trim() || isSaving || isUploadingExcel}>
             {editingId ? <Pencil size={18} aria-hidden="true" /> : <Plus size={18} aria-hidden="true" />}
             {editingId ? "학생 수정" : "학생 추가"}
           </button>
           {editingId ? (
-            <button className="secondary-button w-full sm:w-auto" type="button" onClick={resetForm} disabled={isSaving}>
+            <button className="secondary-button w-full sm:w-auto" type="button" onClick={resetForm} disabled={isSaving || isUploadingExcel}>
               <X size={18} aria-hidden="true" />
               수정 취소
             </button>
           ) : null}
-          <button className="secondary-button w-full sm:w-auto" type="button" onClick={loadStudents} disabled={isLoading || isSaving}>
+          <button className="secondary-button w-full sm:w-auto" type="button" onClick={loadStudents} disabled={isLoading || isSaving || isUploadingExcel}>
             <RefreshCw size={18} aria-hidden="true" className={isLoading ? "animate-spin" : ""} />
             새로고침
           </button>
@@ -224,6 +378,55 @@ export function StudentManager() {
 
         {message ? <p className="mt-3 rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
         {error ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">{error}</p> : null}
+        {uploadNotes.length > 0 ? (
+          <ul className="mt-3 list-disc rounded-md bg-slate-50 p-3 pl-6 text-xs leading-5 text-slate-600">
+            {uploadNotes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      <section className="panel p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+            <FileSpreadsheet size={20} aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-base font-bold text-slate-950">학생 엑셀 업로드</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              첫 번째 시트의 헤더는 이름, 학년, 학과, 반, 번호를 사용합니다. 학과는 관리자 화면의 학과명 또는 코드와 일치해야 합니다.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="space-y-2">
+            <span className="field-label">엑셀 파일</span>
+            <input
+              ref={excelInputRef}
+              className="input-base"
+              type="file"
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              onChange={(event) => {
+                setExcelFile(event.target.files?.[0] || null);
+                setUploadNotes([]);
+                setMessage("");
+                setError("");
+              }}
+              disabled={isSaving || isUploadingExcel}
+            />
+          </label>
+          <button
+            className="primary-button self-end"
+            type="button"
+            onClick={uploadStudentsFromExcel}
+            disabled={!excelFile || isSaving || isUploadingExcel}
+          >
+            {isUploadingExcel ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <Upload size={18} aria-hidden="true" />}
+            엑셀 업로드
+          </button>
+        </div>
       </section>
 
       <section className="panel overflow-hidden">
@@ -255,7 +458,7 @@ export function StudentManager() {
                     className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-700"
                     onClick={() => startEdit(student)}
                     aria-label={`${student.name} 수정`}
-                    disabled={isSaving}
+                    disabled={isSaving || isUploadingExcel}
                   >
                     <Pencil size={17} aria-hidden="true" />
                   </button>
@@ -264,7 +467,7 @@ export function StudentManager() {
                     className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-600"
                     onClick={() => removeStudent(student)}
                     aria-label={`${student.name} 삭제`}
-                    disabled={isSaving}
+                    disabled={isSaving || isUploadingExcel}
                   >
                     <Trash2 size={17} aria-hidden="true" />
                   </button>
