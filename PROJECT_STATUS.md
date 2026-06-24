@@ -1,260 +1,291 @@
 # Project Status
 
-최종 업데이트: 2026-06-22
+최종 업데이트: 2026-06-24
 
 ## 현재 상태 요약
 
-마이스터고 학생부 작성 지원 앱은 Next.js App Router, TypeScript, TailwindCSS, Gemini API, Supabase 기반 구조로 전환 중이다. 학생 관리 화면은 localStorage fallback 없이 Supabase Auth + Supabase DB 기반 CRUD를 사용한다.
+공업계 마이스터고 학생부 작성 지원 플랫폼은 Next.js 15 App Router, TypeScript, TailwindCSS, Supabase Auth/DB, Gemini API, Vercel 기반으로 동작한다.
 
-2026-06-22 추가 점검에서 학생 추가 실패 원인을 화면과 브라우저 console에서 확인할 수 있도록 보강했다. `createStudent()`는 `public.students`에 실제 insert를 수행하며, 실패 시 Supabase 오류의 `message`, `details`, `hint`, `code`와 RLS 의심 안내를 UI와 console에 남긴다. 학생 추가/수정 성공 후에는 Supabase에서 목록을 다시 fetch한다.
+현재 앱은 회원가입/로그인, 학생 관리, 과세특 생성, 행동특성 및 종합의견 생성, 관리자 설정 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다.
 
-현재 빌드 상태:
+## 현재 완료 기능
 
+- Vercel 배포 완료
+- Supabase Auth 완료
+- 학생 CRUD 완료
+- `public.students` 저장 성공 확인
+- 관리자 권한 기능 완료
+- 관리자 페이지 완료
+- 학과 관리 완료
+- 과목 관리 완료
+- 체크리스트 관리 완료
 - `npm run typecheck` 통과
 - `npm run build` 통과
-- 로컬 개발 서버는 최근 `http://localhost:3002` 기준으로 실행 확인됨
 
-## Supabase Auth 연결 상태
+## 완료된 주요 기능
 
-구현 상태:
+### 인증과 사용자 권한
 
-- Supabase 브라우저 클라이언트 생성 유틸이 있음: `lib/supabase.ts`
-- 로그인/회원가입 UI 구현됨: `components/LoginForm.tsx`
-- 로그아웃 버튼 구현됨: `components/LogoutButton.tsx`
-- 로그인 페이지가 실제 Supabase Auth 폼을 사용함: `app/login/page.tsx`
-- 회원가입 시 `user_metadata`에 `name`, `school_id`를 넣도록 구현됨
-- 로그인 성공 시 `/dashboard`로 이동하도록 구현됨
+- Supabase Auth 기반 회원가입/로그인 구현
+- 회원가입 시 `user_metadata`에 `name`, `school_id` 저장
+- `public.users` 프로필 생성/조회 흐름 구현
+- 사용자 role 구조 구현: `admin`, `teacher`
+- 관리자 전용 접근 화면 구현:
+  - `/admin`
+  - `/admin/departments`
+  - `/admin/subjects`
+  - `/admin/checklists`
 
-주의할 점:
+### 학생 관리
 
-- 앱 라우트 보호 미들웨어는 아직 없다.
-- `/dashboard`, `/students`, `/subject-comment`, `/behavior-comment`, `/knowledge`는 로그인하지 않아도 페이지 자체는 접근될 수 있다.
-- 클라이언트 CRUD 함수에서 `supabase.auth.getUser()`로 로그인 여부를 확인하므로, 데이터 작업은 로그인 없이는 실패한다.
+- 학생 목록 조회
+- 학생 추가
+- 학생 수정
+- 학생 삭제
+- 학생 추가/수정 후 Supabase 기준 목록 재조회
+- 학생 삭제 후 화면 목록 갱신
+- `school_id` 기준 데이터 분리
+- `public.students` 실제 저장 성공 확인
 
-## Vercel 환경변수 설정 여부
+### 생성 기능
 
-코드와 예시는 준비되어 있으나, 실제 Vercel 프로젝트에 값이 등록되었는지는 이 로컬 작업 환경에서 확인하지 못했다.
+- 과세특 생성 화면 구현
+- 행동특성 및 종합의견 생성 화면 구현
+- Gemini API 기반 서버 Route 연결
+- 생성 결과 복사 기능
+- 생성 결과 Supabase `record_drafts` 저장 기능
 
-필수 환경변수:
+### 관리자 설정 기능
 
-```bash
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
-NEXT_PUBLIC_DEFAULT_SCHOOL_ID=demo-school
-```
+- 관리자 홈 구현
+- 학과 관리 구현
+  - 추가
+  - 수정
+  - 삭제
+- 과목 관리 구현
+  - 추가
+  - 수정
+  - 삭제
+- 과세특 체크리스트 관리 구현
+  - 활동유형
+  - 역량 키워드
+- 행동특성 체크리스트 관리 구현
+  - 생활태도
+  - 협업
+  - 리더십
+  - 책임감
+  - 안전의식
+  - 직업윤리
+- DB 우선 설정 로딩 구현
+- 기존 `options.ts` 상수 fallback 구현
+- 모바일/데스크톱 작성 UI에서 관리자 설정값 사용
 
-서버/관리 기능 및 기존 RAG 실험용:
+## 현재 사용 중인 주요 테이블
 
-```bash
-SUPABASE_SECRET_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-SUPABASE_STORAGE_BUCKET=knowledge-files
-DEFAULT_SCHOOL_ID=demo-school
-OPENAI_API_KEY=
-OPENAI_MODEL=
-OPENAI_VECTOR_STORE_ID=
-```
-
-Gemini 생성용:
-
-```bash
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-확인해야 할 것:
-
-- Vercel Project Settings > Environment Variables에 위 값이 Production/Preview/Development 각각 필요한 범위로 등록되어 있는지 확인
-- Supabase publishable key 또는 anon key가 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`에 들어갔는지 확인
-- `.env.local`에는 값이 있을 수 있으나, 운영 배포에는 Vercel 환경변수가 별도로 필요함
-
-## 생성된 테이블
-
-마이그레이션 파일:
-
-- `supabase/migrations/20260622_auth_students.sql`
-
-생성 대상:
-
-- `public.schools`
 - `public.users`
 - `public.students`
 - `public.record_drafts`
+- `public.departments`
+- `public.subjects`
+- `public.checklist_categories`
+- `public.checklist_items`
 
-주요 관계:
+## Supabase 구조 요약
 
-- `public.users.id` -> `auth.users.id`
-- `public.users.school_id` -> `public.schools.id`
-- `public.students.school_id` -> `public.schools.id`
-- `public.students.created_by` -> `public.users.id`
-- `public.record_drafts.school_id` -> `public.schools.id`
-- `public.record_drafts.user_id` -> `public.users.id`
-- `public.record_drafts.student_id` -> `public.students.id`
+### users
 
-RLS:
+Supabase Auth 사용자와 앱 프로필을 연결한다.
 
-- `public.users`: 자기 프로필 select/insert 허용
-- `public.students`: 같은 `school_id` 사용자만 select/insert/update/delete 허용
-- `public.record_drafts`: 같은 `school_id` 사용자만 select/insert 허용
+- `id`: `auth.users.id` 참조
+- `school_id`: 학교 구분 ID
+- `email`
+- `name`
+- `role`: `teacher` 또는 `admin`
 
-트리거:
+### students
 
-- `auth.users` insert 후 `public.handle_new_auth_user()` 실행
-- 신규 Auth 사용자 생성 시 `public.users` 프로필 자동 생성 시도
-- `users`, `students`의 `updated_at` 자동 갱신
+학교별 학생 정보를 저장한다.
 
-## 현재 문제: students 테이블에 실제 insert가 안 됨
+- `school_id` 기준으로 데이터 분리
+- `created_by`로 등록 교사 추적
+- 학생 CRUD는 `lib/students.ts`에서 관리
 
-보고된 증상:
+### record_drafts
 
-- 학생 관리 화면은 Supabase CRUD를 호출하도록 변경됨.
-- 그러나 실제 Supabase 프로젝트에서 `students` insert가 되지 않는 문제가 보고됨.
+생성된 과세특/행동특성 초안과 입력 payload를 저장한다.
 
-이번 코드 점검 결과:
+- `mode`: `subject` 또는 `behavior`
+- `input_payload`
+- `result_payload`
+- `draft_text`
 
-- `components/StudentManager.tsx`는 active `localStorage`를 사용하지 않음
-- `lib/students.ts`의 `createStudent()`는 `.from("students").insert(...)`로 `public.students`에 insert함
-- insert payload는 migration 컬럼과 일치함: `name`, `grade`, `department`, `class_name`, `number`, `school_id`, `created_by`
-- `school_id`는 로그인 사용자 metadata의 `school_id`를 우선 사용하고, 없으면 `NEXT_PUBLIC_DEFAULT_SCHOOL_ID` 또는 `DEFAULT_SCHOOL_ID`, 마지막으로 `demo-school`을 사용함
-- `public.students` RLS insert 정책은 `public.users.id = auth.uid()`이고 `public.users.school_id = students.school_id`일 때만 허용함
-- 학생 추가/수정 후에는 `listStudents()`를 다시 호출해 Supabase 기준 목록으로 화면을 갱신함
-- `schools` upsert, `users` profile 생성, `students` insert/select 실패가 더 이상 조용히 묻히지 않고 화면과 console에 표시됨
+### departments
 
-실제 Supabase 프로젝트에서 계속 insert가 안 되면 가능성이 높은 원인:
+관리자가 수정할 수 있는 학교별 학과 설정이다.
 
-1. `public.users` 프로필이 생성되지 않았거나 현재 로그인한 `auth.uid()`와 매칭되지 않음
-2. `public.users.school_id`와 insert하려는 `students.school_id`가 다름
-3. RLS 정책에서 참조하는 `public.users` row가 없어 `with check`가 false가 됨
-4. `supabase/migrations/20260622_auth_students.sql`이 실제 Supabase 프로젝트에 아직 적용되지 않았거나 일부만 적용됨
-5. Auth 이메일 확인 설정 때문에 회원가입 직후 session이 없고, 로그인 상태 없이 CRUD를 시도함
-6. `NEXT_PUBLIC_SUPABASE_URL` 또는 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`가 잘못되어 다른 Supabase 프로젝트를 보고 있음
+- `school_id`
+- `code`
+- `label`
+- `sort_order`
 
-우선 확인 SQL:
+### subjects
 
-```sql
-select id, email, raw_user_meta_data
-from auth.users
-order by created_at desc;
+관리자가 수정할 수 있는 학교별 과목 설정이다.
 
-select id, school_id, email, name, role
-from public.users
-order by created_at desc;
+- `school_id`
+- `name`
+- `sort_order`
 
-select id, school_id, name, grade, department, class_name, number, created_by
-from public.students
-order by created_at desc;
+### checklist_categories
+
+과세특/행동특성 체크리스트 분류를 저장한다.
+
+- `mode`: `subject` 또는 `behavior`
+- `key`
+- `label`
+- `sort_order`
+
+### checklist_items
+
+각 체크리스트 분류에 속한 항목을 저장한다.
+
+- `school_id`
+- `category_id`
+- `label`
+- `sort_order`
+
+## 주요 마이그레이션
+
+```bash
+supabase/migrations/20260622_auth_students.sql
+supabase/migrations/20260622_admin_settings.sql
 ```
 
-현재 로그인 사용자의 `auth.uid()`와 `public.users.id`가 일치해야 하며, `students.school_id`는 `public.users.school_id`와 같아야 한다.
+`20260622_auth_students.sql`:
 
-임시 진단 방법:
+- `schools`
+- `users`
+- `students`
+- `record_drafts`
+- RLS 정책
+- 신규 Auth 사용자 프로필 생성 트리거
 
-- Supabase SQL Editor에서 위 3개 select 결과 확인
-- 브라우저 개발자 콘솔 또는 학생 관리 화면의 오류 메시지 확인
-- Supabase Table Editor에서 RLS 정책이 적용되어 있는지 확인
-- Supabase Auth에서 해당 사용자가 이메일 인증 완료 상태인지 확인
+`20260622_admin_settings.sql`:
 
-## localStorage fallback 가능성
+- `departments`
+- `subjects`
+- `checklist_categories`
+- `checklist_items`
+- 관리자 전용 write RLS 정책
+- 같은 학교 사용자 read RLS 정책
+- 기존 학과/과목/체크리스트 기본값 seed
+- 동적 학과 관리를 위한 `students.department` check constraint 제거
 
-현재 코드 기준으로 `components`, `lib`, `app` 아래의 active localStorage 참조는 제거된 상태다.
+## 최근 해결한 문제
 
-최근 확인:
+- GitHub 업로드 경로 문제
+  - 프로젝트 루트와 업로드 대상 폴더 구조를 확인하고, GitHub 업로드 시 폴더 구조 유지가 필요하다는 점을 문서화했다.
+- Vercel 빌드 오류
+  - 로컬 `npm run typecheck`, `npm run build` 기준으로 검증했다.
+- 관리자 페이지 빌드 오류
+  - `/admin`, `/admin/departments`, `/admin/subjects`, `/admin/checklists` 라우트와 관리자 컴포넌트를 정리했다.
+- `settingsOptions` 타입 오류
+  - `RecordComposerViewProps`에 `settingsOptions`를 명시하고, `RecordComposer.tsx`에서 `viewProps` 생성 시 항상 포함하도록 수정했다.
+  - DB 로딩 전 또는 DB 데이터가 없을 때 `getFallbackSettingsOptions()`를 통해 기존 `options.ts` 상수를 사용하도록 정리했다.
 
-- `readStoredStudents`
-- `writeStoredStudents`
-- `studentStorageKey`
-- `localStorage`
+## 주요 파일
 
-위 키워드는 `components`, `lib`, `app` 검색에서 더 이상 발견되지 않았다.
+문서:
 
-남아 있을 수 있는 것:
+- `README.md`
+- `PROJECT_STATUS.md`
 
-- 사용자 브라우저 localStorage 안에는 과거 버전에서 저장한 `industrial-student-record-ai:students`, `industrial-student-record-ai:records` 데이터가 남아 있을 수 있음
-- 하지만 현재 코드에서는 학생 목록/학생부 초안 저장에 localStorage fallback을 사용하지 않음
-- `.next` 캐시 또는 구버전 dev server가 살아 있으면 예전 코드가 보일 수 있으므로, 이상하면 개발 서버 재시작 필요
-
-## 관련 파일 목록
-
-Supabase/Auth:
+Auth/Supabase:
 
 - `lib/supabase.ts`
 - `lib/supabase-server.ts`
+- `lib/students.ts`
 - `components/LoginForm.tsx`
 - `components/LogoutButton.tsx`
 - `app/login/page.tsx`
 
-학생 CRUD:
+학생 관리:
 
-- `lib/students.ts`
 - `components/StudentManager.tsx`
 - `app/students/page.tsx`
 
-작성 화면과 학생 목록 연동:
+작성 화면:
 
 - `components/RecordComposer.tsx`
 - `components/DesktopRecordComposer.tsx`
 - `components/MobileRecordStepper.tsx`
 - `components/GeneratedResultCard.tsx`
 - `components/SelectableChipGroup.tsx`
+- `app/subject-comment/page.tsx`
+- `app/behavior-comment/page.tsx`
 
-초안 저장:
+관리자 기능:
 
-- `lib/record-drafts.ts`
+- `lib/admin-settings.ts`
+- `components/AdminGuard.tsx`
+- `components/AdminHome.tsx`
+- `components/AdminDepartmentManager.tsx`
+- `components/AdminSubjectManager.tsx`
+- `components/AdminChecklistManager.tsx`
+- `app/admin/page.tsx`
+- `app/admin/departments/page.tsx`
+- `app/admin/subjects/page.tsx`
+- `app/admin/checklists/page.tsx`
 
-DB/환경변수:
-
-- `supabase/migrations/20260622_auth_students.sql`
-- `supabase/schema.sql`
-- `.env.example`
-- `README.md`
-
-생성 API 유지:
+생성 API:
 
 - `app/api/generate/subject-comment/route.ts`
 - `app/api/generate/behavior-comment/route.ts`
 - `lib/gemini.ts`
 
-## 다음 작업자가 확인해야 할 파일
-
-1. `supabase/migrations/20260622_auth_students.sql`
-   - 실제 Supabase 프로젝트에 적용되었는지 확인
-   - RLS 정책과 `handle_new_auth_user` 트리거가 정상 생성되었는지 확인
-
-2. `lib/students.ts`
-   - `ensureUserProfile()`가 실제 로그인 사용자에 대해 `public.users` row를 만들거나 읽는지 확인
-   - `createStudent()` insert payload의 `school_id`, `created_by` 값 확인
-
-3. `components/StudentManager.tsx`
-   - 학생 추가/수정/삭제 후 화면 오류 메시지 확인
-   - Supabase error.message를 UI에 표시하므로 실제 오류를 여기서 확인 가능
-
-4. `components/LoginForm.tsx`
-   - 회원가입 시 `school_id` metadata가 들어가는지 확인
-   - 이메일 인증 설정에 따라 session 유무가 달라지는지 확인
-
-5. `lib/supabase.ts`
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-   - `NEXT_PUBLIC_DEFAULT_SCHOOL_ID`
-   - 위 값이 올바르게 읽히는지 확인. 클라이언트에서는 `NEXT_PUBLIC_DEFAULT_SCHOOL_ID`가 우선이며, 코드상 `DEFAULT_SCHOOL_ID` fallback도 둠
-
-6. `.env.local` 및 Vercel 환경변수
-   - 로컬과 Vercel이 같은 Supabase 프로젝트를 바라보는지 확인
-   - 클라이언트용 publishable key와 서버용 service role key를 혼동하지 않았는지 확인
-
-## 권장 다음 작업
-
-1. Supabase SQL Editor에서 `20260622_auth_students.sql` 전체 적용
-2. Supabase Auth에서 테스트 교사 계정 생성 또는 앱 회원가입
-3. `public.users`에 해당 계정 row가 생성되었는지 확인
-4. `/students`에서 학생 추가 시 표시되는 오류 메시지 확인
-5. insert 실패 시 학생 관리 화면의 오류 메시지와 브라우저 console의 `[students] createStudent.insertStudent failed` 로그 확인
-6. Supabase SQL Editor에서 `auth.users`, `public.users`, `public.students`의 `id`/`school_id` 매칭 확인
-
-## 실행 명령
+## 실행 및 검증 명령
 
 ```bash
 npm run typecheck
 npm run build
 npm run dev -- --port 3002
 ```
+
+## 배포 상태
+
+- Vercel 배포 완료
+- Supabase Auth 및 학생 저장 흐름 동작 확인됨
+- Vercel 환경변수에 Supabase 클라이언트용 값이 설정된 상태
+- 현재 운영 중인 Vercel Production 배포 주소가 확정됨
+
+```text
+Production URL: https://meister-record-ai.vercel.app
+GitHub: https://github.com/quiet210/meister-record-ai
+```
+
+## 다음 개발 우선순위
+
+1. 학생 엑셀 업로드
+2. 과세특 일괄 생성
+3. 행동특성 일괄 생성
+4. 결과 엑셀 다운로드
+5. 교육과정 업로드
+6. RAG 기반 생성
+
+## 다음 채팅에서 작업할 때 주의사항
+
+- `README.md` 먼저 읽기
+- `PROJECT_STATUS.md` 먼저 읽기
+- 기존 Auth 구조 수정 금지
+- 기존 학생 CRUD 수정 최소화
+- 관리자 기능 유지
+- `settingsOptions` fallback 흐름 유지
+- GitHub 업로드 시 폴더 구조 유지
+- 코드 변경 후에는 `npm run typecheck`와 `npm run build` 확인
+
+## 현재 주의할 점
+
+- 앱 라우트 보호 미들웨어는 아직 없다.
+- `/dashboard`, `/students`, `/subject-comment`, `/behavior-comment`, `/knowledge`는 페이지 자체 접근이 가능하지만 실제 데이터 작업은 로그인 사용자 확인 후 수행된다.
+- 사용자 브라우저 localStorage 안에는 과거 버전 데이터가 남아 있을 수 있으나, 현재 학생 목록/학생부 초안 저장은 Supabase DB 기준이다.
+- `supabase/schema.sql`은 과거 `profiles` 기반 구조가 남아 있을 수 있으므로, 실제 기준은 최신 migration 파일이다.
