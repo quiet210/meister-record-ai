@@ -38,6 +38,11 @@ type StudentResult = {
   error?: string;
 };
 
+type StudentsBulkResult = {
+  students: Student[];
+  error?: string;
+};
+
 type SupabaseErrorLike = {
   message?: string;
   code?: string;
@@ -251,6 +256,66 @@ export async function createStudent(input: StudentInput): Promise<StudentResult>
   }
 
   return { student: normalizeStudent(data as StudentRow) };
+}
+
+export async function createStudents(inputs: StudentInput[]): Promise<StudentsBulkResult> {
+  const supabase = createSupabaseBrowserClient();
+  if (!supabase) return { students: [], error: "Supabase 환경변수가 설정되지 않았습니다." };
+
+  const validInputs = inputs.filter((input) => input.name.trim());
+  if (validInputs.length === 0) {
+    return {
+      students: [],
+      error: "업로드할 학생 데이터가 없습니다."
+    };
+  }
+
+  const profileResult = await ensureUserProfile();
+  if (!profileResult.profile) {
+    return {
+      students: [],
+      error: profileResult.error
+    };
+  }
+
+  const profile = profileResult.profile;
+  const insertPayloads = validInputs.map((input) => ({
+    ...cleanStudentInput(input),
+    school_id: profile.school_id,
+    created_by: profile.id
+  }));
+
+  const { data, error } = await supabase.from("students").insert(insertPayloads).select(studentColumns);
+
+  if (error) {
+    const formattedError = formatSupabaseError("학생 엑셀 업로드", error);
+    logSupabaseError("createStudents.insertStudents", error, {
+      schoolId: profile.school_id,
+      createdBy: profile.id,
+      count: insertPayloads.length
+    });
+    return {
+      students: [],
+      error: formattedError
+    };
+  }
+
+  if (!data) {
+    const errorMessage = "학생 엑셀 업로드 실패: insert 응답이 비어 있습니다. Supabase students 테이블과 RLS select 정책을 확인하세요.";
+    logSupabaseError("createStudents.emptyInsertResponse", errorMessage, {
+      schoolId: profile.school_id,
+      createdBy: profile.id,
+      count: insertPayloads.length
+    });
+    return {
+      students: [],
+      error: errorMessage
+    };
+  }
+
+  return {
+    students: ((data || []) as StudentRow[]).map(normalizeStudent)
+  };
 }
 
 export async function updateStudent(id: string, input: StudentInput): Promise<StudentResult> {
