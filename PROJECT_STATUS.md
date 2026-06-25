@@ -1,12 +1,12 @@
 # Project Status
 
-최종 업데이트: 2026-06-24
+최종 업데이트: 2026-06-25
 
 ## 현재 상태 요약
 
 공업계 마이스터고 학생부 작성 지원 플랫폼은 Next.js 15 App Router, TypeScript, TailwindCSS, Supabase Auth/DB, Gemini API, Vercel 기반으로 동작한다.
 
-현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 행동특성 및 종합의견 생성, 관리자 설정, 교과목/성취기준 관리 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다.
+현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 행동특성 및 종합의견 생성, 관리자 설정, 교과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다.
 
 ## 현재 완료 기능
 
@@ -31,6 +31,7 @@
 - 유사 중복 검사 완료
 - teacher 성취기준 업로드 지원 완료
 - admin 교과목 관리 기능 완료
+- 과세특 생성 시 업로드된 성취기준 Gemini 프롬프트 반영 완료
 - `npm run typecheck` 통과
 - `npm run build` 통과
 
@@ -69,6 +70,7 @@
 - 과세특 생성 화면 구현
 - 행동특성 및 종합의견 생성 화면 구현
 - Gemini API 기반 서버 Route 연결
+- 과세특 생성 시 선택 과목 기준 `curriculum_standards` active 성취기준 조회 및 Gemini 프롬프트 반영
 - 생성 결과 복사 기능
 - 생성 결과 Supabase `record_drafts` 저장 기능
 
@@ -130,8 +132,12 @@
   - 시트명: `성취기준업로드양식`
 - 성취기준 검색 함수 뼈대 추가
   - `lib/curriculum.ts`의 `getCurriculumStandardsBySubject(subjectName)`
+- 과세특 생성 프롬프트 연결 완료
+  - 선택 과목명과 `school_id`, `status = active` 조건으로 성취기준 조회
+  - 단원명, 성취기준, 핵심키워드를 최대 5개까지 Gemini 프롬프트에 참고 자료로 주입
+  - 성취기준이 없거나 조회를 건너뛰어도 기존 과세특 생성 로직으로 계속 동작
 
-중요: 성취기준 업로드 기능은 완료됐지만 아직 생성 AI에는 직접 반영되지 않는다. 다음 단계에서 과세특 생성 시 `subjectName` 기준으로 `curriculum_standards`를 검색해 Gemini 프롬프트에 주입해야 한다.
+중요: 성취기준 업로드 기능과 생성 AI 프롬프트 반영은 완료됐다. 다음 단계에서는 단순 과목명 조회를 학년, 학과, 단원, 활동 메모 기반 RAG 검색으로 확장할 수 있다.
 
 현재 성취기준 흐름:
 
@@ -142,14 +148,14 @@
 ↓
 DB 저장
 ↓
-조회 가능
+Gemini 생성 프롬프트 반영
 ```
 
 현재 상태:
 
 - `curriculum_standards` 저장 완료
 - `getCurriculumStandardsBySubject(subjectName)` 구현 완료
-- 아직 Gemini 생성 프롬프트에는 연결되지 않음
+- 과세특 생성 시 선택 과목 기준으로 active 성취기준을 최대 5개 조회해 Gemini 프롬프트에 반영 완료
 
 ## 현재 사용 중인 주요 테이블
 

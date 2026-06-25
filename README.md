@@ -60,6 +60,7 @@
 - 학생 엑셀 양식 다운로드 완료
 - 성취기준 엑셀 업로드 완료
 - 성취기준 엑셀 양식 다운로드 완료
+- 과세특 생성 시 업로드된 성취기준 Gemini 프롬프트 반영 완료
 
 ## 주요 화면
 
@@ -171,14 +172,14 @@ GitHub: https://github.com/quiet210/meister-record-ai
 ↓
 DB 저장
 ↓
-조회 가능
+Gemini 생성 프롬프트 반영
 ```
 
 현재 상태:
 
 - `curriculum_standards` 저장 완료
 - `getCurriculumStandardsBySubject(subjectName)` 구현 완료
-- 아직 Gemini 생성 프롬프트에는 연결되지 않음
+- 과세특 생성 시 선택 과목 기준으로 active 성취기준을 최대 5개 조회해 Gemini 프롬프트에 반영 완료
 
 적용할 주요 마이그레이션:
 
@@ -219,7 +220,7 @@ where email = 'admin@school.kr';
 
 ### 1순위 다음 작업
 
-업로드된 `curriculum_standards`를 실제 과세특 생성 프롬프트에 연결합니다.
+성취기준 프롬프트 반영 흐름을 RAG 검색 기반으로 확장합니다.
 
 ```text
 과목 선택
@@ -231,10 +232,12 @@ curriculum_standards 조회
 Gemini 프롬프트 주입
 ↓
 과세특 생성
+↓
+향후 Vector Store/RAG 검색과 통합
 ```
 
-- 성취기준 업로드 기능은 완료됐지만 아직 생성 AI 프롬프트에는 직접 반영되지 않습니다.
-- 다음 단계에서 과세특 생성 시 `subjectName` 기준으로 `curriculum_standards`를 검색하고 Gemini 프롬프트에 주입합니다.
+- 성취기준 업로드 기능과 과세특 생성 프롬프트 반영은 완료됐습니다.
+- 다음 단계에서는 단순 과목명 조회를 넘어 학년, 학과, 단원, 학생 활동 메모를 함께 고려하는 RAG 검색으로 확장할 수 있습니다.
 
 ## 개발 시 주의사항
 
