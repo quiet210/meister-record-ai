@@ -31,10 +31,21 @@ type GeminiCallResult =
       model: string;
     };
 
+type CurriculumPromptStandard = {
+  unitName: string;
+  achievementStandard: string;
+  keywords: string;
+};
+
+type GeminiPromptOptions = {
+  curriculumStandards?: CurriculumPromptStandard[];
+};
+
 const fallbackGeminiModel = "gemini-2.5-flash";
 const maxGenerationAttempts = 2;
 const minDraftChars = 250;
 const maxDraftChars = 700;
+const maxCurriculumPromptStandards = 5;
 
 function buildSystemInstruction() {
   return [
@@ -68,8 +79,37 @@ function lengthInstruction(payload: RecordFormPayload) {
   return "350자 이상 500자 이하, 2~4개의 완결된 문장으로 작성하라.";
 }
 
-function buildSubjectPrompt(payload: Extract<RecordFormPayload, { mode: "subject" }>, retryInstruction?: string) {
+function buildCurriculumStandardsSection(standards: CurriculumPromptStandard[] = []) {
+  const selectedStandards = standards
+    .filter((standard) => standard.achievementStandard.trim())
+    .slice(0, maxCurriculumPromptStandards);
+
+  if (selectedStandards.length === 0) return "";
+
+  const standardBlocks = selectedStandards.map((standard, index) =>
+    [
+      `${index + 1}.`,
+      "[성취기준]",
+      standard.achievementStandard,
+      "[단원]",
+      standard.unitName || "입력 없음",
+      "[핵심키워드]",
+      standard.keywords || "입력 없음"
+    ].join("\n")
+  );
+
   return [
+    "다음은 해당 과목의 성취기준이다.",
+    "반드시 아래 내용을 참고하여",
+    "학생의 활동을 해당 과목의 특성에 맞게 작성하라.",
+    "단, 성취기준 문장을 그대로 복사하거나 나열하지 말고 교사 관찰 메모의 실제 활동과 연결해 자연스럽게 반영하라.",
+    "",
+    ...standardBlocks
+  ].join("\n");
+}
+
+function buildSubjectPrompt(payload: Extract<RecordFormPayload, { mode: "subject" }>, retryInstruction?: string, options?: GeminiPromptOptions) {
+  const lines = [
     "세부능력 및 특기사항 초안을 작성하라.",
     "과목 수행, 단원 활동, 실습 과정, 역량, 문제 해결 과정을 중심으로 작성한다.",
     lengthInstruction(payload),
@@ -93,9 +133,19 @@ function buildSubjectPrompt(payload: Extract<RecordFormPayload, { mode: "subject
     `활동 유형: ${payload.activityTypes.join(", ") || "입력 없음"}`,
     `역량: ${payload.competencies.join(", ") || "입력 없음"}`,
     `보완점: ${payload.improvements.join(", ") || "입력 없음"}`,
-    `교사 관찰 메모: ${payload.observationMemo}`,
-    retryInstruction ? `\n${retryInstruction}` : ""
-  ].join("\n");
+    `교사 관찰 메모: ${payload.observationMemo}`
+  ];
+
+  const curriculumStandardsSection = buildCurriculumStandardsSection(options?.curriculumStandards);
+  if (curriculumStandardsSection) {
+    lines.push("", curriculumStandardsSection);
+  }
+
+  if (retryInstruction) {
+    lines.push("", retryInstruction);
+  }
+
+  return lines.join("\n");
 }
 
 function buildBehaviorPrompt(payload: Extract<RecordFormPayload, { mode: "behavior" }>, retryInstruction?: string) {
@@ -128,8 +178,8 @@ function buildBehaviorPrompt(payload: Extract<RecordFormPayload, { mode: "behavi
   ].join("\n");
 }
 
-function buildPrompt(payload: RecordFormPayload, retryInstruction?: string) {
-  return payload.mode === "subject" ? buildSubjectPrompt(payload, retryInstruction) : buildBehaviorPrompt(payload, retryInstruction);
+function buildPrompt(payload: RecordFormPayload, retryInstruction?: string, options?: GeminiPromptOptions) {
+  return payload.mode === "subject" ? buildSubjectPrompt(payload, retryInstruction, options) : buildBehaviorPrompt(payload, retryInstruction);
 }
 
 function extractGeminiText(data: GeminiGenerateResponse) {
@@ -210,7 +260,8 @@ async function callGeminiModel(
   payload: RecordFormPayload,
   routeName: string,
   attempt: number,
-  retryInstruction?: string
+  retryInstruction?: string,
+  options?: GeminiPromptOptions
 ): Promise<GeminiCallResult> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
@@ -226,7 +277,7 @@ async function callGeminiModel(
       contents: [
         {
           role: "user",
-          parts: [{ text: buildPrompt(payload, retryInstruction) }]
+          parts: [{ text: buildPrompt(payload, retryInstruction, options) }]
         }
       ],
       generationConfig: {
@@ -310,13 +361,13 @@ async function callGeminiModel(
   };
 }
 
-async function generateCompleteDraftWithModel(apiKey: string, model: string, payload: RecordFormPayload, routeName: string) {
+async function generateCompleteDraftWithModel(apiKey: string, model: string, payload: RecordFormPayload, routeName: string, options?: GeminiPromptOptions) {
   const warnings: string[] = [];
   let retryInstruction: string | undefined;
   let lastValidationReasons: string[] = [];
 
   for (let attempt = 1; attempt <= maxGenerationAttempts; attempt += 1) {
-    const result = await callGeminiModel(apiKey, model, payload, routeName, attempt, retryInstruction);
+    const result = await callGeminiModel(apiKey, model, payload, routeName, attempt, retryInstruction, options);
 
     if (!result.ok) {
       return {
@@ -382,7 +433,11 @@ async function generateCompleteDraftWithModel(apiKey: string, model: string, pay
   };
 }
 
-export async function generateStudentRecordDraftWithGemini(payload: RecordFormPayload, routeName: string = payload.mode): Promise<GenerateResponse> {
+export async function generateStudentRecordDraftWithGemini(
+  payload: RecordFormPayload,
+  routeName: string = payload.mode,
+  options?: GeminiPromptOptions
+): Promise<GenerateResponse> {
   const validationWarnings = validatePayload(payload);
   if (validationWarnings.length > 0) {
     return {
@@ -402,10 +457,10 @@ export async function generateStudentRecordDraftWithGemini(payload: RecordFormPa
   }
 
   const requestedModel = process.env.GEMINI_MODEL || fallbackGeminiModel;
-  const primaryResult = await generateCompleteDraftWithModel(apiKey, requestedModel, payload, routeName);
+  const primaryResult = await generateCompleteDraftWithModel(apiKey, requestedModel, payload, routeName, options);
   const fallbackRequired =
     !primaryResult.ok && primaryResult.failureType === "api" && primaryResult.status === 503 && requestedModel !== fallbackGeminiModel;
-  const result = fallbackRequired ? await generateCompleteDraftWithModel(apiKey, fallbackGeminiModel, payload, routeName) : primaryResult;
+  const result = fallbackRequired ? await generateCompleteDraftWithModel(apiKey, fallbackGeminiModel, payload, routeName, options) : primaryResult;
   const fallbackWarning = fallbackRequired
     ? [`${requestedModel} 모델이 일시적으로 사용할 수 없어 ${fallbackGeminiModel}로 재시도했습니다.`]
     : [];
