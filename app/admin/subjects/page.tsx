@@ -1,13 +1,5 @@
-import { AdminGuard } from "@/components/AdminGuard";
-import { AdminSubjectManager } from "@/components/AdminSubjectManager";
-import { AppShell } from "@/components/AppShell";
+import { redirect } from "next/navigation";
 
 export default function AdminSubjectsPage() {
-  return (
-    <AppShell>
-      <AdminGuard>
-        <AdminSubjectManager />
-      </AdminGuard>
-    </AppShell>
-  );
+  redirect("/admin/curriculum");
 }
