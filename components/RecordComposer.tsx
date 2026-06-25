@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { gradeOptions } from "@/lib/options";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
 import { saveRecordDraft } from "@/lib/record-drafts";
-import { listStudents } from "@/lib/students";
+import { ensureUserProfile, listStudents } from "@/lib/students";
 import type { CommentLength, CommentMode, Department, GenerateResponse, RecordFormPayload, Student } from "@/lib/types";
 import { DesktopRecordComposer } from "@/components/DesktopRecordComposer";
 import { MobileRecordStepper } from "@/components/MobileRecordStepper";
@@ -93,6 +93,7 @@ function modeConfig(mode: CommentMode): RecordComposerConfig {
 export function RecordComposer({ mode }: RecordComposerProps) {
   const config = modeConfig(mode);
   const [settingsOptions, setSettingsOptions] = useState<SettingsOptions>(() => fallbackSettingsOptions);
+  const [schoolId, setSchoolId] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [grade, setGrade] = useState<(typeof gradeOptions)[number]>("1학년");
@@ -141,8 +142,15 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       }
     }
 
+    async function loadProfile() {
+      const result = await ensureUserProfile();
+      if (!isMounted || !result.profile) return;
+      setSchoolId(result.profile.school_id);
+    }
+
     loadSettings();
     loadStudents();
+    loadProfile();
     window.addEventListener("student-record-ai:students-changed", loadStudents);
 
     return () => {
@@ -184,6 +192,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
 
     return {
       mode: "subject",
+      schoolId,
       studentName: selectedStudent?.name,
       grade,
       department,
