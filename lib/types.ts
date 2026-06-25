@@ -25,6 +25,7 @@ export type RagSource = {
 
 export type SubjectRecordFormPayload = {
   mode: "subject";
+  schoolId?: string;
   studentName?: string;
   grade: string;
   department: Department;
