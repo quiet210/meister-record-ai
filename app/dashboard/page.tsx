@@ -23,8 +23,8 @@ const actions = [
   },
   {
     href: "/admin/curriculum",
-    title: "성취기준 업로드",
-    description: "과목별 성취기준과 핵심키워드를 엑셀로 업로드합니다.",
+    title: "과목/성취기준 관리",
+    description: "과목 마스터와 과목별 성취기준, 핵심키워드를 관리합니다.",
     icon: BookOpenText
   },
   {
@@ -82,7 +82,7 @@ export default function DashboardPage() {
           <div className="panel p-4">
             <p className="text-sm font-semibold text-slate-500">지원 화면</p>
             <p className="mt-2 text-2xl font-bold text-slate-950">6개</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">로그인, 대시보드, 세특, 행동특성, 성취기준, 학생 관리를 제공합니다.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">로그인, 대시보드, 세특, 행동특성, 과목/성취기준, 학생 관리를 제공합니다.</p>
           </div>
           <div className="panel p-4">
             <p className="text-sm font-semibold text-slate-500">앱 형태</p>
