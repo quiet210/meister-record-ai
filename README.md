@@ -51,6 +51,10 @@
 - 과목 관리 완료
 - 교과목/성취기준 관리 완료
 - 체크리스트 관리 완료
+- 성취기준 정확 중복 검사 완료
+- 성취기준 유사 중복 검사 완료
+- teacher 성취기준 업로드 지원 완료
+- admin 교과목 관리 기능 완료
 - 관리자 설정은 DB 값을 우선 사용하고, DB 데이터가 없거나 로딩 전이면 `lib/options.ts` 상수를 fallback으로 사용
 - 학생 엑셀 업로드 완료
 - 학생 엑셀 양식 다운로드 완료
@@ -158,6 +162,24 @@ GitHub: https://github.com/quiet210/meister-record-ai
 - `public.checklist_categories`: 체크리스트 분류입니다.
 - `public.checklist_items`: 체크리스트 항목입니다.
 
+현재 성취기준 흐름:
+
+```text
+교과목
+↓
+성취기준 업로드
+↓
+DB 저장
+↓
+조회 가능
+```
+
+현재 상태:
+
+- `curriculum_standards` 저장 완료
+- `getCurriculumStandardsBySubject(subjectName)` 구현 완료
+- 아직 Gemini 생성 프롬프트에는 연결되지 않음
+
 적용할 주요 마이그레이션:
 
 ```bash
@@ -182,13 +204,35 @@ where email = 'admin@school.kr';
 
 ## 다음 작업 후보
 
-다음 우선순위는 과세특 생성 시 성취기준을 연결하는 작업입니다.
+### 중요한 설계 결정
 
 - 교과서 PDF 업로드는 파일 용량과 저작권 문제 때문에 제외합니다.
+- 과목 중심 구조를 사용합니다.
+- 성취기준, 단원명, 핵심키워드만 관리합니다.
+- teacher도 성취기준 업로드가 가능합니다.
+- admin만 교과목 생성, 수정, 삭제를 수행합니다.
+- 중복 업로드 방지를 위해 정확 중복과 유사 중복 검사를 모두 수행합니다.
 - 성취기준 업로드 엑셀 컬럼은 `과목명`, `교과유형`, `단원명`, `성취기준`, `핵심키워드`입니다.
 - `교과유형`은 `일반교과`, `NCS교과`, `general`, `ncs`를 허용합니다.
 - 정확 중복 기준은 `school_id`, `subject_name`, `unit_name`, `achievement_standard`입니다.
 - 유사 중복은 성취기준 텍스트 정규화 후 includes 관계와 85% 이상 문자열 유사도로 감지합니다.
+
+### 1순위 다음 작업
+
+업로드된 `curriculum_standards`를 실제 과세특 생성 프롬프트에 연결합니다.
+
+```text
+과목 선택
+↓
+curriculum_standards 조회
+↓
+성취기준 + 단원명 + 키워드 추출
+↓
+Gemini 프롬프트 주입
+↓
+과세특 생성
+```
+
 - 성취기준 업로드 기능은 완료됐지만 아직 생성 AI 프롬프트에는 직접 반영되지 않습니다.
 - 다음 단계에서 과세특 생성 시 `subjectName` 기준으로 `curriculum_standards`를 검색하고 Gemini 프롬프트에 주입합니다.
 

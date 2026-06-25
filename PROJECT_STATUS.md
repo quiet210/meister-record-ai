@@ -25,6 +25,12 @@
 - 교과목/성취기준 관리 페이지 추가
 - 성취기준 업로드 기능 완료
 - 성취기준 엑셀 양식 다운로드 기능 추가
+- `curriculum_subjects` 테이블 추가
+- `curriculum_standards` 테이블 추가
+- 정확 중복 검사 완료
+- 유사 중복 검사 완료
+- teacher 성취기준 업로드 지원 완료
+- admin 교과목 관리 기능 완료
 - `npm run typecheck` 통과
 - `npm run build` 통과
 
@@ -126,6 +132,24 @@
   - `lib/curriculum.ts`의 `getCurriculumStandardsBySubject(subjectName)`
 
 중요: 성취기준 업로드 기능은 완료됐지만 아직 생성 AI에는 직접 반영되지 않는다. 다음 단계에서 과세특 생성 시 `subjectName` 기준으로 `curriculum_standards`를 검색해 Gemini 프롬프트에 주입해야 한다.
+
+현재 성취기준 흐름:
+
+```text
+교과목
+↓
+성취기준 업로드
+↓
+DB 저장
+↓
+조회 가능
+```
+
+현재 상태:
+
+- `curriculum_standards` 저장 완료
+- `getCurriculumStandardsBySubject(subjectName)` 구현 완료
+- 아직 Gemini 생성 프롬프트에는 연결되지 않음
 
 ## 현재 사용 중인 주요 테이블
 
@@ -381,10 +405,34 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 ### 다음 단계 설계 방향
 
+1순위는 업로드된 `curriculum_standards`를 실제 과세특 생성 프롬프트에 연결하는 작업이다.
+
+```text
+과목 선택
+↓
+curriculum_standards 조회
+↓
+성취기준 + 단원명 + 키워드 추출
+↓
+Gemini 프롬프트 주입
+↓
+과세특 생성
+```
+
 - 과세특 작성 화면의 `subjectName` 값을 기준으로 `getCurriculumStandardsBySubject(subjectName)`를 호출한다.
 - 검색된 `curriculum_standards` 중 `status = active`인 항목의 단원명, 성취기준, 핵심키워드를 프롬프트 컨텍스트로 정리한다.
 - 기존 과세특 생성 API와 Gemini 호출 구조는 유지하고, 프롬프트 입력 데이터에 성취기준 컨텍스트만 추가한다.
 - 이번 작업에서는 아직 세특 생성 프롬프트에 성취기준을 주입하지 않았다.
+
+## 중요한 설계 결정
+
+- 교과서 PDF 업로드는 하지 않는다.
+- 서버 용량 및 저작권 문제 때문에 교과서 원문은 저장하지 않는다.
+- 과목 중심 구조를 사용한다.
+- 성취기준, 단원명, 핵심키워드만 관리한다.
+- teacher도 성취기준 업로드가 가능하다.
+- admin만 교과목 생성, 수정, 삭제를 수행한다.
+- 중복 업로드 방지를 위해 정확 중복과 유사 중복 검사를 모두 수행한다.
 
 ## 다음 채팅에서 작업할 때 주의사항
 
