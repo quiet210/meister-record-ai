@@ -6,7 +6,7 @@
 
 공업계 마이스터고 학생부 작성 지원 플랫폼은 Next.js 15 App Router, TypeScript, TailwindCSS, Supabase Auth/DB, Gemini API, Vercel 기반으로 동작한다.
 
-현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 행동특성 및 종합의견 생성, 관리자 설정, 교과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다.
+현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 행동특성 및 종합의견 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다.
 
 ## 현재 완료 기능
 
@@ -20,9 +20,9 @@
 - 관리자 권한 기능 완료
 - 관리자 페이지 완료
 - 학과 관리 완료
-- 과목 관리 완료
+- 과목/성취기준 관리 완료
 - 체크리스트 관리 완료
-- 교과목/성취기준 관리 페이지 추가
+- 과목/성취기준 관리 페이지 추가
 - 성취기준 업로드 기능 완료
 - 성취기준 엑셀 양식 다운로드 기능 추가
 - `curriculum_subjects` 테이블 추가
@@ -30,7 +30,8 @@
 - 정확 중복 검사 완료
 - 유사 중복 검사 완료
 - teacher 성취기준 업로드 지원 완료
-- admin 교과목 관리 기능 완료
+- admin 과목 관리 기능 완료
+- 과목 관리 `curriculum_subjects` 중심 통합 완료
 - 과세특 생성 시 업로드된 성취기준 Gemini 프롬프트 반영 완료
 - `npm run typecheck` 통과
 - `npm run build` 통과
@@ -46,9 +47,9 @@
 - 관리자 전용 접근 화면 구현:
   - `/admin`
   - `/admin/departments`
-  - `/admin/subjects`
+  - `/admin/subjects`는 deprecated 경로로 `/admin/curriculum` 리다이렉트
   - `/admin/checklists`
-- 교과목/성취기준 화면 구현:
+- 과목/성취기준 화면 구현:
   - `/admin/curriculum`
   - teacher도 성취기준 업로드 가능
 
@@ -99,10 +100,10 @@
 - 기존 `options.ts` 상수 fallback 구현
 - 모바일/데스크톱 작성 UI에서 관리자 설정값 사용
 
-### 교과목/성취기준 관리
+### 과목/성취기준 관리
 
 - `/admin/curriculum` 페이지 구현
-- 교과목 생성/수정/삭제 구현
+- 과목 생성/수정/삭제 구현
   - `admin`만 가능
   - 필드: `subject_name`, `subject_type`, `description`, `sort_order`
 - 성취기준 엑셀 업로드 구현
@@ -142,11 +143,11 @@
 현재 성취기준 흐름:
 
 ```text
-교과목
+curriculum_subjects 과목
 ↓
 성취기준 업로드
 ↓
-DB 저장
+curriculum_standards 저장
 ↓
 Gemini 생성 프롬프트 반영
 ```
@@ -155,6 +156,8 @@ Gemini 생성 프롬프트 반영
 
 - `curriculum_standards` 저장 완료
 - `getCurriculumStandardsBySubject(subjectName)` 구현 완료
+- 과세특 작성 화면의 과목 선택 목록은 `curriculum_subjects`를 우선 사용하고, 테이블이 없거나 로딩 실패/빈 결과이면 `lib/options.ts` 상수를 fallback으로 사용
+- 성취기준 업로드는 `curriculum_subjects.school_id + subject_name`을 기준으로 과목을 매칭
 - 과세특 생성 시 선택 과목 기준으로 active 성취기준을 최대 5개 조회해 Gemini 프롬프트에 반영 완료
 
 ## 현재 사용 중인 주요 테이블
@@ -163,7 +166,7 @@ Gemini 생성 프롬프트 반영
 - `public.students`
 - `public.record_drafts`
 - `public.departments`
-- `public.subjects`
+- `public.subjects` deprecated
 - `public.curriculum_subjects`
 - `public.curriculum_standards`
 - `public.checklist_categories`
@@ -209,7 +212,7 @@ Supabase Auth 사용자와 앱 프로필을 연결한다.
 
 ### subjects
 
-관리자가 수정할 수 있는 학교별 과목 설정이다.
+Deprecated된 기존 학교별 과목 설정 테이블이다. 즉시 삭제하지 않고 데이터 보존과 이전 호환용으로만 유지한다.
 
 - `school_id`
 - `name`
@@ -217,7 +220,7 @@ Supabase Auth 사용자와 앱 프로필을 연결한다.
 
 ### curriculum_subjects
 
-학교 공통 교과목과 교과유형을 저장한다.
+단일 과목 마스터 테이블이다. 과세특 과목 선택, 성취기준 업로드 매칭, 성취기준 검색의 과목 기준으로 사용한다.
 
 - `school_id`
 - `subject_name`
@@ -265,6 +268,7 @@ Supabase Auth 사용자와 앱 프로필을 연결한다.
 supabase/migrations/20260622_auth_students.sql
 supabase/migrations/20260622_admin_settings.sql
 supabase/migrations/20260624_curriculum.sql
+supabase/migrations/20260625_unify_subject_master.sql
 ```
 
 `20260622_auth_students.sql`:
@@ -302,6 +306,13 @@ supabase/migrations/20260624_curriculum.sql
 - 정확 중복 방지를 위한 unique constraint
   - `(school_id, subject_name, unit_name, achievement_standard)`
 
+`20260625_unify_subject_master.sql`:
+
+- `subjects` 테이블에 deprecated comment 추가
+- `curriculum_subjects`를 단일 과목 마스터로 명시
+- 기존 `subjects` 데이터를 `school_id + subject_name` 기준으로 `curriculum_subjects`에 이전
+- 기존 `curriculum_subjects`에 같은 `school_id + subject_name` 과목이 있으면 기존 데이터를 유지
+
 ## 최근 해결한 문제
 
 - GitHub 업로드 경로 문제
@@ -319,11 +330,16 @@ supabase/migrations/20260624_curriculum.sql
 - `xlsx` 의존성 누락 오류
   - 학생 엑셀 업로드와 양식 다운로드를 위해 `xlsx` 패키지를 추가했다.
   - 엑셀 파서와 템플릿 생성 로직은 사용자 동작 시 동적 import로 로드해 `/students` 초기 번들 부담을 줄였다.
-- 교과목/성취기준 관리 기능 추가
+- 과목/성취기준 관리 기능 추가
   - `/admin/curriculum` 라우트를 추가했다.
   - 관리자 홈과 공통 내비게이션, 대시보드에서 접근할 수 있게 했다.
-  - teacher도 성취기준 업로드는 가능하지만 교과목 생성/수정/삭제는 숨기고 DB/RLS에서도 제한한다.
+  - teacher도 성취기준 업로드는 가능하지만 과목 생성/수정/삭제는 숨기고 DB/RLS에서도 제한한다.
   - 정확 중복은 저장하지 않고, 유사 중복은 미리보기에서 의심 상태로 표시한 뒤 선택적으로 저장한다.
+- 과목 관리 구조 통합
+  - 과목 마스터를 `curriculum_subjects` 중심으로 통합했다.
+  - `subjects` 테이블은 deprecated 처리하고 즉시 삭제하지 않는다.
+  - 과세특 과목 선택 목록, 성취기준 업로드 과목 매칭, 성취기준 검색은 모두 `curriculum_subjects`/`curriculum_standards` 기준으로 동작한다.
+  - `/admin/subjects`는 별도 과목 관리 화면으로 사용하지 않고 `/admin/curriculum`으로 리다이렉트한다.
 
 ## 주요 파일
 
@@ -402,16 +418,15 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 ## 다음 개발 우선순위
 
-1. 과세특 생성 시 과목명 기준 성취기준 검색
-2. Gemini 프롬프트에 성취기준 주입
-3. 과세특 일괄 생성
-4. 행동특성 일괄 생성
-5. 결과 엑셀 다운로드
-6. RAG 기반 생성
+1. 과세특 성취기준 검색을 과목명 단순 조회에서 RAG 기반 검색으로 확장
+2. 과세특 일괄 생성
+3. 행동특성 일괄 생성
+4. 결과 엑셀 다운로드
+5. RAG 기반 생성 품질 개선
 
 ### 다음 단계 설계 방향
 
-1순위는 업로드된 `curriculum_standards`를 실제 과세특 생성 프롬프트에 연결하는 작업이다.
+다음 1순위는 업로드된 `curriculum_standards`를 과목명 단순 조회에서 학년, 학과, 단원, 학생 활동 메모를 함께 고려하는 RAG 검색으로 확장하는 작업이다.
 
 ```text
 과목 선택
@@ -425,20 +440,24 @@ Gemini 프롬프트 주입
 과세특 생성
 ```
 
-- 과세특 작성 화면의 `subjectName` 값을 기준으로 `getCurriculumStandardsBySubject(subjectName)`를 호출한다.
-- 검색된 `curriculum_standards` 중 `status = active`인 항목의 단원명, 성취기준, 핵심키워드를 프롬프트 컨텍스트로 정리한다.
-- 기존 과세특 생성 API와 Gemini 호출 구조는 유지하고, 프롬프트 입력 데이터에 성취기준 컨텍스트만 추가한다.
-- 이번 작업에서는 아직 세특 생성 프롬프트에 성취기준을 주입하지 않았다.
+- 현재 과세특 작성 화면의 `subjectName` 값은 `curriculum_subjects`에서 가져온 과목명이다.
+- 생성 API는 선택 과목명과 `school_id`를 기준으로 `curriculum_standards.status = active` 성취기준을 조회한다.
+- 검색된 단원명, 성취기준, 핵심키워드를 최대 5개까지 Gemini 프롬프트 컨텍스트로 주입한다.
+- 다음 단계에서는 랜덤/분산 선택이 아니라 검색 품질 개선과 RAG 확장을 별도 작업으로 진행한다.
 
 ## 중요한 설계 결정
 
 - 교과서 PDF 업로드는 하지 않는다.
 - 서버 용량 및 저작권 문제 때문에 교과서 원문은 저장하지 않는다.
-- 과목 중심 구조를 사용한다.
+- 과목 관리는 `curriculum_subjects`를 단일 마스터로 사용한다.
+- `subjects` 테이블은 deprecated 상태이며 즉시 삭제하지 않는다.
+- 과세특 과목 선택, 성취기준 업로드 매칭, 성취기준 검색은 모두 `curriculum_subjects`와 `curriculum_standards` 기준으로 동작한다.
+- `/admin/subjects`는 더 이상 별도 과목 관리 화면으로 사용하지 않는다.
 - 성취기준, 단원명, 핵심키워드만 관리한다.
 - teacher도 성취기준 업로드가 가능하다.
-- admin만 교과목 생성, 수정, 삭제를 수행한다.
+- admin만 과목 생성, 수정, 삭제를 수행한다.
 - 중복 업로드 방지를 위해 정확 중복과 유사 중복 검사를 모두 수행한다.
+- 성취기준 랜덤/분산 선택은 이번 통합 작업 범위에 포함하지 않는다.
 
 ## 다음 채팅에서 작업할 때 주의사항
 

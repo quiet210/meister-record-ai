@@ -8,7 +8,7 @@
 
 - 과세특 작성: 과목, 단원, 활동유형, 역량 키워드, 교사 관찰 메모를 바탕으로 교과 세부능력 및 특기사항 초안을 생성합니다.
 - 행동특성 및 종합의견 작성: 생활태도, 협업, 리더십, 책임감, 안전의식, 직업윤리 관련 체크리스트와 담임 관찰 메모를 바탕으로 초안을 생성합니다.
-- 관리자 설정 기능: 학교별 학과명, 과목명, 교과목/성취기준, 과세특/행동특성 체크리스트를 관리자 화면에서 관리합니다.
+- 관리자 설정 기능: 학교별 학과명, 과목/성취기준, 과세특/행동특성 체크리스트를 관리자 화면에서 관리합니다.
 
 ## 기술 스택
 
@@ -29,8 +29,7 @@
 - 행동특성 생성
 - 관리자 기능
 - 학과 관리
-- 과목 관리
-- 교과목/성취기준 관리
+- 과목/성취기준 관리
 - 성취기준 엑셀 업로드
 - 성취기준 엑셀 양식 다운로드
 - 체크리스트 관리
@@ -48,13 +47,13 @@
 - 관리자 권한 `role` 기능 완료
 - 관리자 페이지 `/admin` 완료
 - 학과 관리 완료
-- 과목 관리 완료
-- 교과목/성취기준 관리 완료
+- 과목/성취기준 관리 완료
 - 체크리스트 관리 완료
 - 성취기준 정확 중복 검사 완료
 - 성취기준 유사 중복 검사 완료
 - teacher 성취기준 업로드 지원 완료
-- admin 교과목 관리 기능 완료
+- admin 과목 관리 기능 완료
+- 과목 관리는 `curriculum_subjects` 중심으로 통합 완료
 - 관리자 설정은 DB 값을 우선 사용하고, DB 데이터가 없거나 로딩 전이면 `lib/options.ts` 상수를 fallback으로 사용
 - 학생 엑셀 업로드 완료
 - 학생 엑셀 양식 다운로드 완료
@@ -72,8 +71,8 @@
 - `/knowledge`: 지식베이스 문서 업로드
 - `/admin`: 관리자 설정 홈
 - `/admin/departments`: 학과 관리
-- `/admin/subjects`: 과목 관리
-- `/admin/curriculum`: 교과목/성취기준 관리, 성취기준 엑셀 업로드
+- `/admin/subjects`: deprecated 경로이며 `/admin/curriculum`으로 리다이렉트
+- `/admin/curriculum`: 과목/성취기준 관리, 성취기준 엑셀 업로드
 - `/admin/checklists`: 체크리스트 관리
 
 ## 실행 방법
@@ -157,8 +156,8 @@ GitHub: https://github.com/quiet210/meister-record-ai
 - `public.students`: 학교별 학생 정보입니다.
 - `public.record_drafts`: 생성된 과세특/행동특성 초안 저장 테이블입니다.
 - `public.departments`: 학교별 학과 설정입니다.
-- `public.subjects`: 학교별 과목 설정입니다.
-- `public.curriculum_subjects`: 학교 공통 교과목과 교과유형을 저장합니다.
+- `public.subjects`: deprecated된 기존 과목 설정 테이블입니다. 즉시 삭제하지 않고 데이터 보존과 이전 호환용으로만 유지합니다.
+- `public.curriculum_subjects`: 단일 과목 마스터 테이블입니다. 과목명, 교과유형, 설명, 정렬순서를 저장합니다.
 - `public.curriculum_standards`: 과목별 성취기준, 단원명, 핵심키워드, 중복 처리 상태를 저장합니다.
 - `public.checklist_categories`: 체크리스트 분류입니다.
 - `public.checklist_items`: 체크리스트 항목입니다.
@@ -166,11 +165,11 @@ GitHub: https://github.com/quiet210/meister-record-ai
 현재 성취기준 흐름:
 
 ```text
-교과목
+curriculum_subjects 과목
 ↓
 성취기준 업로드
 ↓
-DB 저장
+curriculum_standards 저장
 ↓
 Gemini 생성 프롬프트 반영
 ```
@@ -179,6 +178,8 @@ Gemini 생성 프롬프트 반영
 
 - `curriculum_standards` 저장 완료
 - `getCurriculumStandardsBySubject(subjectName)` 구현 완료
+- 과세특 작성 화면의 과목 선택 목록은 `curriculum_subjects`를 우선 사용하고, 테이블이 없거나 로딩 실패/빈 결과이면 `lib/options.ts` 상수를 fallback으로 사용
+- 성취기준 업로드는 `curriculum_subjects.school_id + subject_name`을 기준으로 과목을 매칭
 - 과세특 생성 시 선택 과목 기준으로 active 성취기준을 최대 5개 조회해 Gemini 프롬프트에 반영 완료
 
 적용할 주요 마이그레이션:
@@ -187,13 +188,14 @@ Gemini 생성 프롬프트 반영
 supabase/migrations/20260622_auth_students.sql
 supabase/migrations/20260622_admin_settings.sql
 supabase/migrations/20260624_curriculum.sql
+supabase/migrations/20260625_unify_subject_master.sql
 ```
 
 권한 구조:
 
 - `teacher`: 학생 관리, 과세특 생성, 행동특성 생성 기능을 사용합니다.
-- `admin`: teacher 기능에 더해 `/admin`, `/admin/departments`, `/admin/subjects`, `/admin/curriculum`, `/admin/checklists`에 접근해 학교별 설정을 관리합니다.
-- 성취기준 업로드는 `teacher`와 `admin` 모두 가능하며, 교과목 생성/수정/삭제는 `admin`만 가능합니다.
+- `admin`: teacher 기능에 더해 `/admin`, `/admin/departments`, `/admin/curriculum`, `/admin/checklists`에 접근해 학교별 설정을 관리합니다. `/admin/subjects`는 별도 과목 관리 화면으로 사용하지 않고 `/admin/curriculum`으로 이동합니다.
+- 성취기준 업로드는 `teacher`와 `admin` 모두 가능하며, 과목 생성/수정/삭제는 `admin`만 가능합니다.
 
 관리자 계정 승격 예시:
 
@@ -208,10 +210,13 @@ where email = 'admin@school.kr';
 ### 중요한 설계 결정
 
 - 교과서 PDF 업로드는 파일 용량과 저작권 문제 때문에 제외합니다.
-- 과목 중심 구조를 사용합니다.
+- 과목 관리는 `curriculum_subjects`를 단일 마스터로 사용합니다.
+- `subjects` 테이블은 deprecated 상태이며 즉시 삭제하지 않습니다.
+- 과세특 과목 선택, 성취기준 업로드 매칭, 성취기준 검색은 모두 `curriculum_subjects`와 `curriculum_standards` 기준으로 동작합니다.
+- `/admin/subjects`는 더 이상 별도 과목 관리 화면으로 사용하지 않습니다.
 - 성취기준, 단원명, 핵심키워드만 관리합니다.
 - teacher도 성취기준 업로드가 가능합니다.
-- admin만 교과목 생성, 수정, 삭제를 수행합니다.
+- admin만 과목 생성, 수정, 삭제를 수행합니다.
 - 중복 업로드 방지를 위해 정확 중복과 유사 중복 검사를 모두 수행합니다.
 - 성취기준 업로드 엑셀 컬럼은 `과목명`, `교과유형`, `단원명`, `성취기준`, `핵심키워드`입니다.
 - `교과유형`은 `일반교과`, `NCS교과`, `general`, `ncs`를 허용합니다.
