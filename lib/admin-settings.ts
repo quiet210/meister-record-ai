@@ -74,10 +74,10 @@ type DepartmentRow = {
   sort_order: number;
 };
 
-type SubjectRow = {
+type CurriculumSubjectSettingsRow = {
   id: string;
   school_id: string;
-  name: string;
+  subject_name: string;
   sort_order: number;
 };
 
@@ -176,7 +176,7 @@ export const behaviorSchoolLifeChecklistCategoryKeys: ChecklistCategoryKey[] = [
 export const behaviorIndustrialChecklistCategoryKeys: ChecklistCategoryKey[] = ["behavior_safety", "behavior_work_ethic"];
 
 const departmentColumns = "id, school_id, code, label, sort_order";
-const subjectColumns = "id, school_id, name, sort_order";
+const curriculumSubjectColumns = "id, school_id, subject_name, sort_order";
 const categoryColumns = "id, school_id, mode, key, label, sort_order";
 const itemColumns = "id, school_id, category_id, label, sort_order";
 
@@ -289,13 +289,18 @@ export async function loadSettingsOptions(): Promise<SettingsOptions> {
 
   const [departmentResult, subjectResult, categoryResult, itemResult] = await Promise.all([
     supabase.from("departments").select(departmentColumns).eq("school_id", profile.school_id).order("sort_order", { ascending: true }).order("label", { ascending: true }),
-    supabase.from("subjects").select(subjectColumns).eq("school_id", profile.school_id).order("sort_order", { ascending: true }).order("name", { ascending: true }),
+    supabase
+      .from("curriculum_subjects")
+      .select(curriculumSubjectColumns)
+      .eq("school_id", profile.school_id)
+      .order("sort_order", { ascending: true })
+      .order("subject_name", { ascending: true }),
     supabase.from("checklist_categories").select(categoryColumns).eq("school_id", profile.school_id).order("sort_order", { ascending: true }),
     supabase.from("checklist_items").select(itemColumns).eq("school_id", profile.school_id).order("sort_order", { ascending: true }).order("label", { ascending: true })
   ]);
 
   const departmentRows = departmentResult.error ? [] : ((departmentResult.data || []) as DepartmentRow[]);
-  const subjectRows = subjectResult.error ? [] : ((subjectResult.data || []) as SubjectRow[]);
+  const subjectRows = subjectResult.error ? [] : ((subjectResult.data || []) as CurriculumSubjectSettingsRow[]);
   const categoryRows = categoryResult.error
     ? []
     : ((categoryResult.data || []) as Array<Omit<ChecklistCategoryRow, "key"> & { key: string }>).filter((row): row is ChecklistCategoryRow =>
@@ -304,7 +309,7 @@ export async function loadSettingsOptions(): Promise<SettingsOptions> {
   const itemRows = itemResult.error ? [] : ((itemResult.data || []) as ChecklistItemRow[]);
 
   if (departmentResult.error) console.warn("[admin-settings] departments fallback", departmentResult.error);
-  if (subjectResult.error) console.warn("[admin-settings] subjects fallback", subjectResult.error);
+  if (subjectResult.error) console.warn("[admin-settings] curriculum_subjects fallback", subjectResult.error);
   if (categoryResult.error) console.warn("[admin-settings] checklist categories fallback", categoryResult.error);
   if (itemResult.error) console.warn("[admin-settings] checklist items fallback", itemResult.error);
 
@@ -328,7 +333,7 @@ export async function loadSettingsOptions(): Promise<SettingsOptions> {
             sortOrder: row.sort_order
           }))
         : fallback.departmentOptions,
-    subjectOptions: subjectRows.length > 0 ? subjectRows.map((row) => row.name) : fallback.subjectOptions,
+    subjectOptions: subjectRows.length > 0 ? subjectRows.map((row) => row.subject_name) : fallback.subjectOptions,
     subjectChecklistGroups: buildGroups(subjectChecklistCategoryKeys, categoryRows, itemsByKey),
     behaviorSchoolLifeChecklistGroups: buildGroups(behaviorSchoolLifeChecklistCategoryKeys, categoryRows, itemsByKey),
     behaviorIndustrialChecklistGroups: buildGroups(behaviorIndustrialChecklistCategoryKeys, categoryRows, itemsByKey)
@@ -337,6 +342,11 @@ export async function loadSettingsOptions(): Promise<SettingsOptions> {
 
 export async function checkAdminAccess() {
   return getAdminContext();
+}
+
+function isMissingCurriculumSubjectsError(error: SupabaseErrorLike) {
+  const text = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`;
+  return error.code === "42P01" || error.code === "PGRST205" || /schema cache|does not exist|could not find|relation .*curriculum_subjects/i.test(text);
 }
 
 export async function seedDefaultAdminSettings() {
@@ -366,14 +376,22 @@ export async function seedDefaultAdminSettings() {
     if (error) return { error: formatSettingsError("학과 기본값 생성", error) };
   }
 
-  const { data: existingSubjects, error: subjectSelectError } = await supabase.from("subjects").select("id").eq("school_id", profile.school_id).limit(1);
-  if (subjectSelectError) return { error: formatSettingsError("과목 기본값 확인", subjectSelectError) };
+  const { data: existingSubjects, error: subjectSelectError } = await supabase
+    .from("curriculum_subjects")
+    .select("id")
+    .eq("school_id", profile.school_id)
+    .limit(1);
+  if (subjectSelectError && !isMissingCurriculumSubjectsError(subjectSelectError)) {
+    return { error: formatSettingsError("과목 기본값 확인", subjectSelectError) };
+  }
 
-  if (!existingSubjects || existingSubjects.length === 0) {
-    const { error } = await supabase.from("subjects").insert(
-      fallback.subjectOptions.map((name, index) => ({
+  if (!subjectSelectError && (!existingSubjects || existingSubjects.length === 0)) {
+    const { error } = await supabase.from("curriculum_subjects").insert(
+      fallback.subjectOptions.map((subjectName, index) => ({
         school_id: profile.school_id,
-        name,
+        subject_name: subjectName,
+        subject_type: "general",
+        description: "",
         sort_order: (index + 1) * 10
       }))
     );
@@ -497,23 +515,26 @@ export async function listAdminSubjects() {
 
   const { supabase, profile } = contextResult.context;
   const { data, error } = await supabase
-    .from("subjects")
-    .select(subjectColumns)
+    .from("curriculum_subjects")
+    .select(curriculumSubjectColumns)
     .eq("school_id", profile.school_id)
     .order("sort_order", { ascending: true })
-    .order("name", { ascending: true });
+    .order("subject_name", { ascending: true });
 
   if (error) return { subjects: [], error: formatSettingsError("과목 목록 조회", error) };
 
   return {
-    subjects: ((data || []) as SubjectRow[]).map((row) => ({
+    subjects: ((data || []) as CurriculumSubjectSettingsRow[]).map((row) => ({
       id: row.id,
-      name: row.name,
+      name: row.subject_name,
       sortOrder: row.sort_order
     }))
   };
 }
 
+/**
+ * @deprecated 과목 마스터는 public.curriculum_subjects를 사용합니다. 이 함수는 구 화면 호환용입니다.
+ */
 export async function createSubject(input: { name: string }) {
   const contextResult = await getAdminContext();
   if (!contextResult.context) return { error: contextResult.error };
@@ -522,15 +543,20 @@ export async function createSubject(input: { name: string }) {
   if (!name) return { error: "과목명을 입력하세요." };
 
   const { supabase, profile } = contextResult.context;
-  const { error } = await supabase.from("subjects").insert({
+  const { error } = await supabase.from("curriculum_subjects").insert({
     school_id: profile.school_id,
-    name,
+    subject_name: name,
+    subject_type: "general",
+    description: "",
     sort_order: 1000
   });
 
   return error ? { error: formatSettingsError("과목 추가", error) } : {};
 }
 
+/**
+ * @deprecated 과목 마스터는 public.curriculum_subjects를 사용합니다. 이 함수는 구 화면 호환용입니다.
+ */
 export async function updateSubject(id: string, input: { name: string }) {
   const contextResult = await getAdminContext();
   if (!contextResult.context) return { error: contextResult.error };
@@ -539,17 +565,22 @@ export async function updateSubject(id: string, input: { name: string }) {
   if (!name) return { error: "과목명을 입력하세요." };
 
   const { supabase, profile } = contextResult.context;
-  const { error } = await supabase.from("subjects").update({ name }).eq("id", id).eq("school_id", profile.school_id);
+  const { error } = await supabase.from("curriculum_subjects").update({ subject_name: name }).eq("id", id).eq("school_id", profile.school_id);
+  if (error) return { error: formatSettingsError("과목 수정", error) };
 
-  return error ? { error: formatSettingsError("과목 수정", error) } : {};
+  const { error: standardError } = await supabase.from("curriculum_standards").update({ subject_name: name }).eq("subject_id", id).eq("school_id", profile.school_id);
+  return standardError ? { error: formatSettingsError("연결된 성취기준 과목명 동기화", standardError) } : {};
 }
 
+/**
+ * @deprecated 과목 마스터는 public.curriculum_subjects를 사용합니다. 이 함수는 구 화면 호환용입니다.
+ */
 export async function deleteSubject(id: string) {
   const contextResult = await getAdminContext();
   if (!contextResult.context) return { error: contextResult.error };
 
   const { supabase, profile } = contextResult.context;
-  const { error } = await supabase.from("subjects").delete().eq("id", id).eq("school_id", profile.school_id);
+  const { error } = await supabase.from("curriculum_subjects").delete().eq("id", id).eq("school_id", profile.school_id);
 
   return error ? { error: formatSettingsError("과목 삭제", error) } : {};
 }
