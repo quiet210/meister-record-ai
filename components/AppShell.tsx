@@ -11,7 +11,7 @@ const navItems = [
   { href: "/subject-comment", label: "세특 작성", icon: PenLine },
   { href: "/behavior-comment", label: "행동특성", icon: ClipboardList },
   { href: "/knowledge", label: "문서", icon: Database },
-  { href: "/admin/curriculum", label: "성취기준", icon: BookOpenText },
+  { href: "/admin/curriculum", label: "과목/성취기준", icon: BookOpenText },
   { href: "/students", label: "학생 관리", icon: UsersRound }
 ];
 

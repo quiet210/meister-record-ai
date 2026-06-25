@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpenText, ClipboardCheck, Factory, Settings, Tags } from "lucide-react";
+import { BookOpenText, ClipboardCheck, Factory, Settings } from "lucide-react";
 
 const adminLinks = [
   {
@@ -9,15 +9,9 @@ const adminLinks = [
     icon: Factory
   },
   {
-    href: "/admin/subjects",
-    title: "과목 관리",
-    description: "세특과 지식베이스 업로드에서 사용할 과목명을 관리합니다.",
-    icon: Tags
-  },
-  {
     href: "/admin/curriculum",
-    title: "교과목/성취기준 관리",
-    description: "학교 공통 교과목과 과목별 성취기준 엑셀 업로드를 관리합니다.",
+    title: "과목/성취기준 관리",
+    description: "학교 공통 과목과 과목별 성취기준 엑셀 업로드를 함께 관리합니다.",
     icon: BookOpenText
   },
   {
@@ -37,7 +31,7 @@ export function AdminHome() {
             <p className="text-sm font-semibold text-blue-700">Admin Settings</p>
             <h1 className="mt-1 text-2xl font-bold tracking-normal text-slate-950">학교 설정 관리</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              학과, 과목, 체크리스트는 로그인한 관리자 계정의 학교 ID 기준으로 분리되어 저장됩니다.
+              학과, 과목/성취기준, 체크리스트는 로그인한 관리자 계정의 학교 ID 기준으로 분리되어 저장됩니다.
             </p>
           </div>
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-700">

@@ -294,7 +294,7 @@ export function CurriculumManager() {
     await loadAll();
     setSubjectForm(emptySubjectForm);
     setEditingSubject(null);
-    setMessage(editingSubject ? "교과목을 수정했습니다." : "교과목을 추가했습니다.");
+    setMessage(editingSubject ? "과목을 수정했습니다." : "과목을 추가했습니다.");
     setIsSavingSubject(false);
   }
 
@@ -312,7 +312,7 @@ export function CurriculumManager() {
 
     if (editingSubject?.id === subject.id) resetSubjectForm();
     await loadAll();
-    setMessage(`${subject.subjectName} 교과목을 삭제했습니다.`);
+    setMessage(`${subject.subjectName} 과목을 삭제했습니다.`);
     setIsSavingSubject(false);
   }
 
@@ -402,7 +402,7 @@ export function CurriculumManager() {
         <div className="flex items-center gap-3">
           <Loader2 className="animate-spin text-blue-700" size={22} aria-hidden="true" />
           <div>
-            <h1 className="text-lg font-bold text-slate-950">교과목/성취기준 정보를 불러오는 중</h1>
+            <h1 className="text-lg font-bold text-slate-950">과목/성취기준 정보를 불러오는 중</h1>
             <p className="mt-1 text-sm text-slate-500">로그인 사용자와 학교 ID를 확인하고 있습니다.</p>
           </div>
         </div>
@@ -431,9 +431,9 @@ export function CurriculumManager() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-blue-700">Curriculum</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-normal text-slate-950">교과목/성취기준 관리</h1>
+            <h1 className="mt-1 text-2xl font-bold tracking-normal text-slate-950">과목/성취기준 관리</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              학교 공통 교과목과 과목별 성취기준을 관리합니다. 성취기준 업로드는 teacher도 가능하며 교과목 추가, 수정, 삭제는 admin만 가능합니다.
+              학교 공통 과목과 과목별 성취기준을 관리합니다. 성취기준 업로드는 teacher도 가능하며 과목 추가, 수정, 삭제는 admin만 가능합니다.
             </p>
           </div>
           <button className="secondary-button w-full sm:w-auto" type="button" onClick={loadAll} disabled={isLoading || isSavingSubject || isPreviewing || isSavingUpload}>
@@ -452,7 +452,7 @@ export function CurriculumManager() {
             <section className="panel p-4 sm:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-950">교과목 관리</h2>
+                  <h2 className="text-lg font-bold text-slate-950">과목 관리</h2>
                   <p className="mt-1 text-sm leading-6 text-slate-600">성취기준 업로드 전에 과목을 먼저 등록합니다.</p>
                 </div>
                 {editingSubject ? (
@@ -464,7 +464,7 @@ export function CurriculumManager() {
 
               <div className="mt-4 space-y-4">
                 <label className="block space-y-2">
-                  <span className="field-label">교과목명</span>
+                  <span className="field-label">과목명</span>
                   <input className="input-base" value={subjectForm.subjectName} onChange={(event) => updateSubjectForm("subjectName", event.target.value)} placeholder="예: PLC제어" />
                 </label>
                 <label className="block space-y-2">
@@ -498,7 +498,7 @@ export function CurriculumManager() {
                   onClick={saveSubject}
                 >
                   {isSavingSubject ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : editingSubject ? <Pencil size={18} aria-hidden="true" /> : <Plus size={18} aria-hidden="true" />}
-                  {editingSubject ? "교과목 수정" : "교과목 추가"}
+                  {editingSubject ? "과목 수정" : "과목 추가"}
                 </button>
               </div>
             </section>
@@ -507,9 +507,9 @@ export function CurriculumManager() {
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 text-amber-700" size={22} aria-hidden="true" />
                 <div>
-                  <h2 className="text-lg font-bold text-slate-950">교과목 등록은 관리자 권한이 필요합니다.</h2>
+              <h2 className="text-lg font-bold text-slate-950">과목 등록은 관리자 권한이 필요합니다.</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    업로드 파일의 과목명이 목록에 없으면 저장되지 않습니다. 필요한 과목은 관리자에게 등록을 요청하세요.
+                      업로드 파일의 과목명이 목록에 없으면 저장되지 않습니다. 필요한 과목은 관리자에게 등록을 요청하세요.
                   </p>
                 </div>
               </div>
@@ -518,11 +518,11 @@ export function CurriculumManager() {
 
           <section className="panel overflow-hidden">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-bold text-slate-900">등록된 교과목</h2>
+              <h2 className="text-sm font-bold text-slate-900">등록된 과목</h2>
               <span className="text-xs font-semibold text-slate-500">{subjects.length}개</span>
             </div>
             {subjects.length === 0 ? (
-              <div className="p-5 text-sm leading-6 text-slate-500">등록된 교과목이 없습니다.</div>
+              <div className="p-5 text-sm leading-6 text-slate-500">등록된 과목이 없습니다.</div>
             ) : (
               <div className="divide-y divide-slate-100">
                 {subjects.map((subject) => (
@@ -667,7 +667,7 @@ export function CurriculumManager() {
 
               {previewSummary.missingSubjectRows > 0 ? (
                 <p className="mt-4 rounded-md bg-orange-50 p-3 text-sm font-semibold leading-6 text-orange-800">
-                  {isAdmin ? "과목 없음 행은 교과목을 생성한 뒤 다시 미리보기/저장하세요." : "과목 없음 행은 관리자에게 과목 등록을 요청한 뒤 다시 업로드하세요."}
+                  {isAdmin ? "과목 없음 행은 과목을 생성한 뒤 다시 미리보기/저장하세요." : "과목 없음 행은 관리자에게 과목 등록을 요청한 뒤 다시 업로드하세요."}
                 </p>
               ) : null}
 
