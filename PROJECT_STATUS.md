@@ -1,6 +1,6 @@
 # Project Status
 
-최종 업데이트: 2026-06-25
+최종 업데이트: 2026-06-26
 
 ## 현재 상태 요약
 
@@ -34,6 +34,7 @@
 - 과목 관리 `curriculum_subjects` 중심 통합 완료
 - 과세특 생성 시 업로드된 성취기준 Gemini 프롬프트 반영 완료
 - 과세특 생성 시 성취기준 관련도 기반 + seed 랜덤 분산 선택 완료
+- Vercel TypeScript 빌드 오류 대응 완료
 - `npm run typecheck` 통과
 - `npm run build` 통과
 
@@ -142,6 +143,7 @@
   - 관련도 높은 후보군 안에서 seed 기반 랜덤성을 적용해 최대 3개를 Gemini 프롬프트에 참고 자료로 주입
   - 후보가 3개 이하이면 전부 사용
   - 성취기준이 없거나 조회를 건너뛰어도 기존 과세특 생성 로직으로 계속 동작
+  - `getCurriculumStandardsBySubject(subjectName, { schoolId, limit })`는 선택적 `limit` 옵션을 지원해 이전 호출 방식과도 타입 호환
 
 중요: 성취기준 업로드 기능, 생성 AI 프롬프트 반영, 학생별 분산 선택은 완료됐다. 다음 단계에서는 현재 관련도 계산을 벡터 검색/RAG와 통합해 검색 품질을 높일 수 있다.
 
@@ -161,6 +163,7 @@ Gemini 생성 프롬프트 반영
 
 - `curriculum_standards` 저장 완료
 - `getCurriculumStandardsBySubject(subjectName)` 구현 완료
+- `GetCurriculumStandardsBySubjectOptions`는 `schoolId`와 선택적 `limit`을 허용하며, 기본 과세특 생성 경로는 전체 후보 조회 후 관련도/분산 선택을 수행
 - 과세특 작성 화면의 과목 선택 목록은 `curriculum_subjects`를 우선 사용하고, 테이블이 없거나 로딩 실패/빈 결과이면 `lib/options.ts` 상수를 fallback으로 사용
 - 성취기준 업로드는 `curriculum_subjects.school_id + subject_name`을 기준으로 과목을 매칭
 - 과세특 생성 시 선택 과목 기준으로 active 성취기준 전체 후보를 조회하고 관련도 기반 + seed 랜덤 분산 선택으로 최대 3개를 Gemini 프롬프트에 반영 완료
@@ -353,6 +356,11 @@ supabase/migrations/20260625_unify_subject_master.sql
   - 관련도 높은 후보군에서 seed 기반 랜덤 추출로 학생별 성취기준이 조금씩 분산되도록 했다.
   - Gemini 프롬프트에 넣는 성취기준은 최대 3개로 제한한다.
   - 서버 로그에는 선택 과목, 전체 후보 수, 최종 선택 성취기준, 사용 seed를 출력한다.
+- Vercel TypeScript 빌드 오류 대응
+  - `app/api/generate/subject-comment/route.ts`에서 더 이상 중복 `limit` 전달을 사용하지 않는 현재 흐름을 확인했다.
+  - Vercel 빌드에서 과거 호출 형태가 섞여도 깨지지 않도록 `lib/curriculum-server.ts`의 `GetCurriculumStandardsBySubjectOptions`에 선택적 `limit`을 추가했다.
+  - `limit`이 유효한 양수일 때만 Supabase 쿼리에 `.limit()`을 적용한다.
+  - 로컬 기준 `npm run typecheck`와 `npm run build` 통과를 확인했다.
 
 ## 주요 파일
 
@@ -460,6 +468,7 @@ Gemini 프롬프트 주입
 - 현재 과세특 작성 화면의 `subjectName` 값은 `curriculum_subjects`에서 가져온 과목명이다.
 - 생성 API는 선택 과목명과 `school_id`를 기준으로 `curriculum_standards.status = active` 성취기준 전체 후보를 조회한다.
 - 검색된 단원명, 성취기준, 핵심키워드는 관련도 기반 + seed 랜덤 분산 선택 후 최대 3개까지 Gemini 프롬프트 컨텍스트로 주입한다.
+- `getCurriculumStandardsBySubject()`는 선택적 `limit` 옵션을 지원하지만, 현재 과세특 생성 기본 경로는 전체 후보를 가져와 별도 선택 로직에서 최대 3개를 고른다.
 - 다음 단계에서는 현재 규칙 기반 관련도 점수를 벡터 검색/RAG와 통합한다.
 
 ## 중요한 설계 결정
