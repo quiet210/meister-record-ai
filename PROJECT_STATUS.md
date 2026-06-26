@@ -6,7 +6,7 @@
 
 공업계 마이스터고 학생부 작성 지원 플랫폼은 Next.js 15 App Router, TypeScript, TailwindCSS, Supabase Auth/DB, Gemini API, Vercel 기반으로 동작한다.
 
-현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 행동특성 및 종합의견 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영과 학생별 분산 선택 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다.
+현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 과세특 일괄 생성, 행동특성 및 종합의견 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영과 학생별 분산 선택 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다.
 
 ## 현재 완료 기능
 
@@ -34,6 +34,9 @@
 - 과목 관리 `curriculum_subjects` 중심 통합 완료
 - 과세특 생성 시 업로드된 성취기준 Gemini 프롬프트 반영 완료
 - 과세특 생성 시 성취기준 관련도 기반 + seed 랜덤 분산 선택 완료
+- `/bulk-subject-comment` 과세특 일괄 생성 화면 추가 완료
+- 과세특 일괄 생성 학생별 입력/상태/결과/복사/실패 재시도 구현 완료
+- 과세특 일괄 생성 동시 API 호출 수 3개 제한 및 `record_drafts` 자동 저장 완료
 - Vercel TypeScript 빌드 오류 대응 완료
 - `npm run typecheck` 통과
 - `npm run build` 통과
@@ -71,6 +74,7 @@
 ### 생성 기능
 
 - 과세특 생성 화면 구현
+- 과세특 일괄 생성 화면 구현
 - 행동특성 및 종합의견 생성 화면 구현
 - Gemini API 기반 서버 Route 연결
 - 과세특 생성 시 선택 과목 기준 `curriculum_standards` active 성취기준 전체 후보 조회 및 Gemini 프롬프트 반영
@@ -78,6 +82,19 @@
 - 관련도 높은 후보군 안에서 `selectedStudentId`, `student_no`, 학생 이름, 현재 날짜 기반 seed 랜덤 선택으로 최대 3개 성취기준 주입
 - 생성 결과 복사 기능
 - 생성 결과 Supabase `record_drafts` 저장 기능
+- 과세특 일괄 생성:
+  - `/bulk-subject-comment` 라우트 추가
+  - 학년/반/학과 필터, 필터 결과 전체 선택, 개별 학생 선택 구현
+  - 과목명, 단원명, 분량, 문체를 공통 입력값으로 관리
+  - 학생별 활동유형, 역량 키워드, 보완점, 교사 관찰 메모 입력 테이블 구현
+  - 활동유형, 역량 키워드, 보완점은 `loadSettingsOptions()`의 관리자 체크리스트 설정값을 사용하고 DB 값이 없으면 기존 옵션으로 fallback
+  - 이전 학생 값 복사, 선택 학생에게 일괄 적용, 빈 값 경고 구현
+  - 학생별 payload에 `selectedStudentId`, `studentNo`, 학생 이름, 학년, 학과, 개별 입력값을 포함해 기존 `/api/generate/subject-comment` API 재사용
+  - 브라우저 측 worker 방식으로 동시 생성 수를 3개로 제한
+  - 학생별 상태를 대기, 생성 중, 완료, 실패로 표시
+  - 생성 결과를 학생별로 표시하고 복사 가능
+  - 생성 성공 시 `saveRecordDraft()`로 `record_drafts`에 자동 저장
+  - 실패한 학생만 다시 생성 가능
 
 ### 관리자 설정 기능
 
@@ -167,6 +184,7 @@ Gemini 생성 프롬프트 반영
 - 과세특 작성 화면의 과목 선택 목록은 `curriculum_subjects`를 우선 사용하고, 테이블이 없거나 로딩 실패/빈 결과이면 `lib/options.ts` 상수를 fallback으로 사용
 - 성취기준 업로드는 `curriculum_subjects.school_id + subject_name`을 기준으로 과목을 매칭
 - 과세특 생성 시 선택 과목 기준으로 active 성취기준 전체 후보를 조회하고 관련도 기반 + seed 랜덤 분산 선택으로 최대 3개를 Gemini 프롬프트에 반영 완료
+- 과세특 일괄 생성도 기존 과세특 생성 API를 학생별로 호출하므로 동일한 성취기준 조회/관련도/seed 분산 선택 흐름을 그대로 사용
 - 성취기준 후보가 3개 이하이면 전부 사용하고, 후보가 없으면 기존 생성 흐름 유지
 
 ## 현재 사용 중인 주요 테이블
@@ -391,7 +409,9 @@ Auth/Supabase:
 - `components/MobileRecordStepper.tsx`
 - `components/GeneratedResultCard.tsx`
 - `components/SelectableChipGroup.tsx`
+- `components/BulkSubjectCommentComposer.tsx`
 - `app/subject-comment/page.tsx`
+- `app/bulk-subject-comment/page.tsx`
 - `app/behavior-comment/page.tsx`
 
 관리자 기능:
@@ -442,10 +462,9 @@ GitHub: https://github.com/quiet210/meister-record-ai
 ## 다음 개발 우선순위
 
 1. 현재 성취기준 관련도 계산을 벡터 검색/RAG와 통합해 검색 품질 개선
-2. 과세특 일괄 생성
-3. 행동특성 일괄 생성
-4. 결과 엑셀 다운로드
-5. RAG 기반 생성 품질 개선
+2. 행동특성 일괄 생성
+3. 결과 엑셀 다운로드
+4. RAG 기반 생성 품질 개선
 
 ### 다음 단계 설계 방향
 
@@ -470,6 +489,7 @@ Gemini 프롬프트 주입
 - 검색된 단원명, 성취기준, 핵심키워드는 관련도 기반 + seed 랜덤 분산 선택 후 최대 3개까지 Gemini 프롬프트 컨텍스트로 주입한다.
 - `getCurriculumStandardsBySubject()`는 선택적 `limit` 옵션을 지원하지만, 현재 과세특 생성 기본 경로는 전체 후보를 가져와 별도 선택 로직에서 최대 3개를 고른다.
 - 다음 단계에서는 현재 규칙 기반 관련도 점수를 벡터 검색/RAG와 통합한다.
+- 과세특 일괄 생성은 완료됐으며, 다음 확장 후보는 생성 결과 엑셀 다운로드와 행동특성 일괄 생성이다.
 
 ## 중요한 설계 결정
 
@@ -484,6 +504,8 @@ Gemini 프롬프트 주입
 - admin만 과목 생성, 수정, 삭제를 수행한다.
 - 중복 업로드 방지를 위해 정확 중복과 유사 중복 검사를 모두 수행한다.
 - 성취기준 랜덤/분산 선택은 과세특 생성 로직에만 적용하며 행동특성 생성 로직, 학생 CRUD, 관리자 기능, 성취기준 업로드 기능은 수정하지 않는다.
+- 과세특 일괄 생성은 기존 단일 과세특 생성 API를 학생별로 재사용하며, 클라이언트에서 동시 실행 수를 3개로 제한한다.
+- 과세특 일괄 생성 성공 결과는 `record_drafts`에 자동 저장한다.
 
 ## 다음 채팅에서 작업할 때 주의사항
 
@@ -499,6 +521,6 @@ Gemini 프롬프트 주입
 ## 현재 주의할 점
 
 - 앱 라우트 보호 미들웨어는 아직 없다.
-- `/dashboard`, `/students`, `/subject-comment`, `/behavior-comment`, `/knowledge`는 페이지 자체 접근이 가능하지만 실제 데이터 작업은 로그인 사용자 확인 후 수행된다.
+- `/dashboard`, `/students`, `/subject-comment`, `/bulk-subject-comment`, `/behavior-comment`, `/knowledge`는 페이지 자체 접근이 가능하지만 실제 데이터 작업은 로그인 사용자 확인 후 수행된다.
 - 사용자 브라우저 localStorage 안에는 과거 버전 데이터가 남아 있을 수 있으나, 현재 학생 목록/학생부 초안 저장은 Supabase DB 기준이다.
 - `supabase/schema.sql`은 과거 `profiles` 기반 구조가 남아 있을 수 있으므로, 실제 기준은 최신 migration 파일이다.

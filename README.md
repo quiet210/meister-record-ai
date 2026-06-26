@@ -26,6 +26,7 @@
 - 학생 엑셀 업로드
 - 학생 엑셀 양식 다운로드
 - 과세특 생성
+- 과세특 일괄 생성
 - 행동특성 생성
 - 관리자 기능
 - 학과 관리
@@ -61,6 +62,10 @@
 - 성취기준 엑셀 양식 다운로드 완료
 - 과세특 생성 시 업로드된 성취기준 Gemini 프롬프트 반영 완료
 - 과세특 생성 시 성취기준 관련도 기반 + seed 랜덤 분산 선택 완료
+- 과세특 일괄 생성 화면 `/bulk-subject-comment` 추가 완료
+- 과세특 일괄 생성 시 학생별 payload를 기존 과세특 생성 API로 호출하고 동시 호출 수를 3개로 제한
+- 과세특 일괄 생성 결과를 학생별로 표시하고 `record_drafts`에 자동 저장
+- Vercel TypeScript 빌드 오류 대응 완료
 
 ## 주요 화면
 
@@ -68,6 +73,7 @@
 - `/dashboard`: 주요 작업 진입 대시보드
 - `/students`: 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드
 - `/subject-comment`: 과세특 생성
+- `/bulk-subject-comment`: 과세특 일괄 생성
 - `/behavior-comment`: 행동특성 및 종합의견 생성
 - `/knowledge`: 지식베이스 문서 업로드
 - `/admin`: 관리자 설정 홈
@@ -179,9 +185,12 @@ Gemini 생성 프롬프트 반영
 
 - `curriculum_standards` 저장 완료
 - `getCurriculumStandardsBySubject(subjectName)` 구현 완료
+- `getCurriculumStandardsBySubject(subjectName, { schoolId, limit })`는 선택적 `limit` 옵션을 지원해 이전 호출 방식과도 호환
 - 과세특 작성 화면의 과목 선택 목록은 `curriculum_subjects`를 우선 사용하고, 테이블이 없거나 로딩 실패/빈 결과이면 `lib/options.ts` 상수를 fallback으로 사용
 - 성취기준 업로드는 `curriculum_subjects.school_id + subject_name`을 기준으로 과목을 매칭
 - 과세특 생성 시 선택 과목 기준 active 성취기준 전체 후보를 조회하고, 학생 입력값과의 관련도 및 seed 기반 랜덤성을 적용해 최대 3개를 Gemini 프롬프트에 반영
+- 과세특 일괄 생성은 학생별 `selectedStudentId`, `studentNo`, 이름, 학년, 학과와 개별 활동유형/역량/보완점/교사 관찰 메모를 payload에 포함해 기존 과세특 생성 API를 재사용
+- 과세특 일괄 생성 화면은 학생별 상태를 대기, 생성 중, 완료, 실패로 표시하고 실패한 학생만 재생성할 수 있음
 - 성취기준 후보가 3개 이하이면 전부 사용하고, 후보가 없거나 조회를 건너뛰면 기존 과세특 생성 흐름으로 계속 동작
 
 적용할 주요 마이그레이션:
@@ -226,6 +235,8 @@ where email = 'admin@school.kr';
 - 유사 중복은 성취기준 텍스트 정규화 후 includes 관계와 85% 이상 문자열 유사도로 감지합니다.
 - 과세특 성취기준 선택은 단원명, 교사 관찰 메모, 활동 유형, 역량 키워드, 보완점, 과목명을 입력 신호로 사용합니다.
 - 성취기준 선택 seed는 사용 가능한 `selectedStudentId`, `student_no`, 학생 이름, 현재 날짜를 조합합니다.
+- `GetCurriculumStandardsBySubjectOptions`는 `schoolId`와 선택적 `limit`을 허용합니다. 과세특 생성의 기본 경로는 전체 후보 조회 후 관련도/분산 선택을 수행합니다.
+- 과세특 일괄 생성은 기존 단일 과세특 생성 API를 학생별로 재사용하며, 브라우저에서 동시 실행 수를 3개로 제한합니다.
 
 ### 1순위 다음 작업
 
@@ -249,6 +260,7 @@ Gemini 프롬프트 주입
 
 - 성취기준 업로드 기능, 과세특 생성 프롬프트 반영, 학생별 분산 선택은 완료됐습니다.
 - 다음 단계에서는 현재 관련도 계산을 벡터 검색/RAG와 통합해 검색 품질을 높일 수 있습니다.
+- 과세특 일괄 생성은 완료됐으며, 다음 확장 후보는 일괄 생성 결과 엑셀 다운로드입니다.
 
 ## 개발 시 주의사항
 
