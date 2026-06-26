@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpenCheck, BookOpenText, ClipboardList, Database, Home, PenLine, Settings, UsersRound } from "lucide-react";
+import { BookOpenCheck, BookOpenText, ClipboardList, Database, Home, ListChecks, PenLine, Settings, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ensureUserProfile } from "@/lib/students";
 
 const navItems = [
   { href: "/dashboard", label: "대시보드", icon: Home },
   { href: "/subject-comment", label: "세특 작성", icon: PenLine },
+  { href: "/bulk-subject-comment", label: "일괄 세특", icon: ListChecks },
   { href: "/behavior-comment", label: "행동특성", icon: ClipboardList },
   { href: "/knowledge", label: "문서", icon: Database },
   { href: "/admin/curriculum", label: "과목/성취기준", icon: BookOpenText },
