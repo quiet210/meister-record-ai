@@ -360,8 +360,8 @@ export function BulkSubjectCommentComposer() {
   }
 
   function copyPreviousStudentValues(studentId: string) {
-    const index = selectedStudents.findIndex((student) => student.id === studentId);
-    const previousStudent = index > 0 ? selectedStudents[index - 1] : undefined;
+    const index = filteredStudents.findIndex((student) => student.id === studentId);
+    const previousStudent = index > 0 ? filteredStudents[index - 1] : undefined;
     if (!previousStudent) {
       setMessage("복사할 이전 학생 값이 없습니다.");
       return;
@@ -375,6 +375,44 @@ export function BulkSubjectCommentComposer() {
       observationMemo: previousInput.observationMemo
     });
     setMessage(`${previousStudent.name} 학생의 입력값을 복사했습니다.`);
+  }
+
+  function copyPreviousValuesToSelected() {
+    const selectedVisibleStudents = filteredStudents.filter((student) => selectedStudentIdSet.has(student.id));
+    if (selectedVisibleStudents.length === 0) {
+      setMessage("이전 값을 복사할 학생을 먼저 선택하세요.");
+      return;
+    }
+
+    let copiedCount = 0;
+    setStudentInputs((current) => {
+      const next = { ...current };
+
+      selectedVisibleStudents.forEach((student) => {
+        const visibleIndex = filteredStudents.findIndex((item) => item.id === student.id);
+        const previousStudent = visibleIndex > 0 ? filteredStudents[visibleIndex - 1] : undefined;
+        if (!previousStudent) return;
+
+        const previousInput = next[previousStudent.id] || makeInitialStudentInput();
+        const currentInput = next[student.id] || makeInitialStudentInput();
+        next[student.id] = {
+          ...currentInput,
+          activityTypes: [...previousInput.activityTypes],
+          competencies: [...previousInput.competencies],
+          improvements: [...previousInput.improvements],
+          observationMemo: previousInput.observationMemo,
+          status: "waiting",
+          result: null,
+          error: "",
+          savedMessage: ""
+        };
+        copiedCount += 1;
+      });
+
+      return next;
+    });
+
+    setMessage(copiedCount > 0 ? `선택한 ${copiedCount}명에게 바로 이전 행의 입력값을 복사했습니다.` : "복사할 이전 행이 없습니다.");
   }
 
   function buildPayload(student: Student, input: StudentSubjectInput): SubjectRecordFormPayload {
@@ -509,6 +547,11 @@ export function BulkSubjectCommentComposer() {
     await generateForStudents(failedStudents);
   }
 
+  async function generateSingleStudent(student: Student) {
+    setSelectedStudentIds((current) => (current.includes(student.id) ? current : [...current, student.id]));
+    await generateForStudents([student]);
+  }
+
   async function copyDraft(studentId: string) {
     const result = studentInputs[studentId]?.result;
     if (!result?.draft) return;
@@ -622,9 +665,9 @@ export function BulkSubjectCommentComposer() {
           <div>
             <div className="flex items-center gap-2">
               <Search size={18} className="text-blue-700" aria-hidden="true" />
-              <h2 className="text-lg font-bold text-slate-950">학생 선택</h2>
+              <h2 className="text-lg font-bold text-slate-950">학생 필터</h2>
             </div>
-            <p className="mt-1 text-sm text-slate-500">필터로 학생을 좁힌 뒤 전체 또는 개별 선택할 수 있습니다.</p>
+            <p className="mt-1 text-sm text-slate-500">필터 결과는 아래 입력 테이블에 바로 표시됩니다.</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -671,98 +714,13 @@ export function BulkSubjectCommentComposer() {
             </select>
           </label>
         </div>
-
-        <div className="mt-4 max-h-56 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-2">
-          {isLoading ? (
-            <div className="flex min-h-24 items-center justify-center text-sm font-semibold text-slate-500">
-              <Loader2 className="mr-2 animate-spin" size={17} aria-hidden="true" />
-              학생 목록 로딩 중
-            </div>
-          ) : null}
-          {!isLoading && filteredStudents.length === 0 ? (
-            <div className="rounded-md bg-white p-3 text-sm text-slate-500">조건에 맞는 학생이 없습니다.</div>
-          ) : null}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            {filteredStudents.map((student) => {
-              const selected = selectedStudentIdSet.has(student.id);
-              return (
-                <label
-                  key={student.id}
-                  className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm transition ${
-                    selected ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-200"
-                  }`}
-                >
-                  <input type="checkbox" className="h-4 w-4" checked={selected} onChange={() => toggleStudent(student.id)} disabled={isGenerating} />
-                  <span className="min-w-0">
-                    <span className="block truncate font-bold text-slate-900">
-                      {student.className} {student.number}번 {student.name}
-                    </span>
-                    <span className="block truncate text-xs text-slate-500">
-                      {student.grade} · {departmentLabel(student.department)}
-                    </span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section className="panel p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-950">선택 학생 일괄 적용</h2>
-            <p className="mt-1 text-sm text-slate-500">입력한 값이 있는 항목만 선택된 학생에게 적용됩니다.</p>
-          </div>
-          <button className="secondary-button" type="button" onClick={applyBulkInputToSelected} disabled={selectedStudents.length === 0 || isGenerating}>
-            <Copy size={17} aria-hidden="true" />
-            선택 학생에게 적용
-          </button>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr_1fr_1.2fr]">
-          <ChipSelector
-            label="활동유형"
-            options={activityOptions}
-            values={bulkInput.activityTypes}
-            onChange={(values) => updateBulkInput({ activityTypes: values })}
-            disabled={isGenerating}
-            compact
-          />
-          <ChipSelector
-            label="역량 키워드"
-            options={competencyOptions}
-            values={bulkInput.competencies}
-            onChange={(values) => updateBulkInput({ competencies: values })}
-            disabled={isGenerating}
-            compact
-          />
-          <ChipSelector
-            label="보완점"
-            options={settingsOptions.subjectImprovementOptions}
-            values={bulkInput.improvements}
-            onChange={(values) => updateBulkInput({ improvements: values })}
-            disabled={isGenerating}
-            compact
-          />
-          <label className="space-y-2">
-            <span className="field-label">교사 관찰 메모</span>
-            <textarea
-              className="input-base min-h-24 resize-y leading-6"
-              placeholder="여러 학생에게 공통으로 적용할 메모가 있을 때 입력하세요."
-              value={bulkInput.observationMemo}
-              onChange={(event) => updateBulkInput({ observationMemo: event.target.value })}
-              disabled={isGenerating}
-            />
-          </label>
-        </div>
       </section>
 
       <section className="panel overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-950">학생별 입력 테이블</h2>
-            <p className="mt-1 text-sm text-slate-500">가로 스크롤 테이블에서 학생별 값을 빠르게 입력합니다.</p>
+            <p className="mt-1 text-sm text-slate-500">필터 결과 {filteredStudents.length}명 중 {selectedStudents.length}명을 선택했습니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button className="primary-button" type="button" onClick={generateSelectedStudents} disabled={!canGenerate}>
@@ -772,6 +730,14 @@ export function BulkSubjectCommentComposer() {
             <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={failedStudents.length === 0 || isGenerating || !subjectName.trim()}>
               <RefreshCcw size={17} aria-hidden="true" />
               실패만 재생성
+            </button>
+            <button className="secondary-button" type="button" onClick={applyBulkInputToSelected} disabled={selectedStudents.length === 0 || isGenerating}>
+              <Copy size={17} aria-hidden="true" />
+              선택 학생에게 값 일괄 적용
+            </button>
+            <button className="secondary-button" type="button" onClick={copyPreviousValuesToSelected} disabled={selectedStudents.length === 0 || isGenerating}>
+              <Copy size={17} aria-hidden="true" />
+              이전 학생 값 복사
             </button>
           </div>
         </div>
@@ -785,10 +751,11 @@ export function BulkSubjectCommentComposer() {
 
         {message ? <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700">{message}</div> : null}
 
-        <div className="max-h-[70vh] overflow-auto">
-          <table className="min-w-[1220px] divide-y divide-slate-200 text-sm">
+        <div className="max-h-[72vh] overflow-auto">
+          <table className="min-w-[1320px] divide-y divide-slate-200 text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs font-bold uppercase tracking-normal text-slate-500 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
               <tr>
+                <th className="w-16 px-4 py-3">선택</th>
                 <th className="w-48 px-4 py-3">학생명</th>
                 <th className="w-56 px-4 py-3">활동유형</th>
                 <th className="w-56 px-4 py-3">역량키워드</th>
@@ -799,21 +766,41 @@ export function BulkSubjectCommentComposer() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
-              {selectedStudents.length === 0 ? (
+              {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
-                    학생을 선택하면 입력 테이블이 표시됩니다.
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                    <Loader2 className="mr-2 inline animate-spin" size={17} aria-hidden="true" />
+                    학생 목록 로딩 중
                   </td>
                 </tr>
               ) : null}
-              {selectedStudents.map((student) => {
+              {!isLoading && filteredStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                    조건에 맞는 학생이 없습니다.
+                  </td>
+                </tr>
+              ) : null}
+              {filteredStudents.map((student) => {
                 const input = studentInputs[student.id] || makeInitialStudentInput();
                 const statusMeta = getStatusMeta(input.status);
                 const warnings = getStudentWarnings(input);
                 const isRowGenerating = input.status === "generating" || input.status === "queued";
+                const selected = selectedStudentIdSet.has(student.id);
+                const rowReady = isStudentReady(input);
 
                 return (
-                  <tr key={student.id} className="align-top">
+                  <tr key={student.id} className={`align-top ${selected ? "bg-blue-50/30" : ""}`}>
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4"
+                        checked={selected}
+                        onChange={() => toggleStudent(student.id)}
+                        disabled={isGenerating}
+                        aria-label={`${student.name} 선택`}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-bold text-slate-950">
                         {student.className} {student.number}번 {student.name}
@@ -888,12 +875,15 @@ export function BulkSubjectCommentComposer() {
                           <Copy size={15} aria-hidden="true" />
                           이전 복사
                         </button>
-                        {input.status === "failed" ? (
-                          <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => generateForStudents([student])} disabled={isGenerating || !subjectName.trim()}>
-                            <Play size={15} aria-hidden="true" />
-                            재생성
-                          </button>
-                        ) : null}
+                        <button
+                          className="secondary-button min-h-10 px-3 py-1.5"
+                          type="button"
+                          onClick={() => generateSingleStudent(student)}
+                          disabled={isGenerating || !subjectName.trim() || !rowReady}
+                        >
+                          <Play size={15} aria-hidden="true" />
+                          {input.status === "failed" ? "재생성" : "개별 생성"}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -966,6 +956,59 @@ export function BulkSubjectCommentComposer() {
           </div>
         )}
       </section>
+
+      <details className="panel p-5">
+        <summary className="cursor-pointer text-lg font-bold text-slate-950">일괄 적용 보조 기능</summary>
+        <p className="mt-1 text-sm text-slate-500">반복 입력이 필요할 때만 열어서 사용합니다. 입력한 값이 있는 항목만 선택 학생에게 적용됩니다.</p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="secondary-button" type="button" onClick={applyBulkInputToSelected} disabled={selectedStudents.length === 0 || isGenerating}>
+            <Copy size={17} aria-hidden="true" />
+            선택 학생에게 적용
+          </button>
+          <button className="secondary-button" type="button" onClick={copyPreviousValuesToSelected} disabled={selectedStudents.length === 0 || isGenerating}>
+            <Copy size={17} aria-hidden="true" />
+            선택 학생 이전 행 복사
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr_1fr_1.2fr]">
+          <ChipSelector
+            label="활동유형"
+            options={activityOptions}
+            values={bulkInput.activityTypes}
+            onChange={(values) => updateBulkInput({ activityTypes: values })}
+            disabled={isGenerating}
+            compact
+          />
+          <ChipSelector
+            label="역량 키워드"
+            options={competencyOptions}
+            values={bulkInput.competencies}
+            onChange={(values) => updateBulkInput({ competencies: values })}
+            disabled={isGenerating}
+            compact
+          />
+          <ChipSelector
+            label="보완점"
+            options={settingsOptions.subjectImprovementOptions}
+            values={bulkInput.improvements}
+            onChange={(values) => updateBulkInput({ improvements: values })}
+            disabled={isGenerating}
+            compact
+          />
+          <label className="space-y-2">
+            <span className="field-label">교사 관찰 메모</span>
+            <textarea
+              className="input-base min-h-24 resize-y leading-6"
+              placeholder="여러 학생에게 공통으로 적용할 메모가 있을 때 입력하세요."
+              value={bulkInput.observationMemo}
+              onChange={(event) => updateBulkInput({ observationMemo: event.target.value })}
+              disabled={isGenerating}
+            />
+          </label>
+        </div>
+      </details>
     </div>
   );
 }
