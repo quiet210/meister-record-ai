@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpenText, ClipboardList, Database, PenLine, UsersRound } from "lucide-react";
+import { BookOpenText, ClipboardList, Database, ListChecks, PenLine, UsersRound } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 
 const actions = [
@@ -8,6 +8,12 @@ const actions = [
     title: "세특 작성",
     description: "실습 활동과 교사 관찰 메모를 바탕으로 세특 초안을 생성합니다.",
     icon: PenLine
+  },
+  {
+    href: "/bulk-subject-comment",
+    title: "과세특 일괄 생성",
+    description: "여러 학생의 활동유형, 역량, 보완점, 관찰 메모를 한 화면에서 입력하고 생성합니다.",
+    icon: ListChecks
   },
   {
     href: "/behavior-comment",
@@ -54,7 +60,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {actions.map((action) => {
             const Icon = action.icon;
             return (
@@ -81,8 +87,8 @@ export default function DashboardPage() {
           </div>
           <div className="panel p-4">
             <p className="text-sm font-semibold text-slate-500">지원 화면</p>
-            <p className="mt-2 text-2xl font-bold text-slate-950">6개</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">로그인, 대시보드, 세특, 행동특성, 과목/성취기준, 학생 관리를 제공합니다.</p>
+            <p className="mt-2 text-2xl font-bold text-slate-950">7개</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">대시보드, 세특, 일괄 세특, 행동특성, 문서, 과목/성취기준, 학생 관리를 제공합니다.</p>
           </div>
           <div className="panel p-4">
             <p className="text-sm font-semibold text-slate-500">앱 형태</p>
