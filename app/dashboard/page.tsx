@@ -22,6 +22,12 @@ const actions = [
     icon: ClipboardList
   },
   {
+    href: "/bulk-behavior-comment",
+    title: "행동특성 일괄 생성",
+    description: "여러 학생의 생활태도, 관계, 책임감, 담임 관찰 메모를 한 화면에서 입력하고 생성합니다.",
+    icon: ClipboardList
+  },
+  {
     href: "/knowledge",
     title: "문서 업로드",
     description: "교과서 학습목표, 교육과정, NCS, 루브릭 파일을 RAG 근거로 등록합니다.",
@@ -87,8 +93,8 @@ export default function DashboardPage() {
           </div>
           <div className="panel p-4">
             <p className="text-sm font-semibold text-slate-500">지원 화면</p>
-            <p className="mt-2 text-2xl font-bold text-slate-950">7개</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">대시보드, 세특, 일괄 세특, 행동특성, 문서, 과목/성취기준, 학생 관리를 제공합니다.</p>
+            <p className="mt-2 text-2xl font-bold text-slate-950">8개</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">대시보드, 세특, 일괄 세특, 행동특성, 일괄 행특, 문서, 과목/성취기준, 학생 관리를 제공합니다.</p>
           </div>
           <div className="panel p-4">
             <p className="text-sm font-semibold text-slate-500">앱 형태</p>
