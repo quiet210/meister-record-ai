@@ -34,6 +34,8 @@ export type SubjectRecordFormPayload = {
   subjectName: string;
   textbook: string;
   unit: string;
+  lengthOption?: CommentLength;
+  writingStyle?: string;
   activityTypes: string[];
   competencies: string[];
   improvements: string[];

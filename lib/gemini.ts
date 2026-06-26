@@ -65,6 +65,18 @@ function buildSystemInstruction() {
 
 function lengthInstruction(payload: RecordFormPayload) {
   if (payload.mode === "subject") {
+    if (payload.lengthOption === "short") {
+      return "250자 이상 350자 이하, 2~3개의 완결된 문장으로 작성하라.";
+    }
+
+    if (payload.lengthOption === "medium") {
+      return "350자 이상 500자 이하, 2~4개의 완결된 문장으로 작성하라.";
+    }
+
+    if (payload.lengthOption === "long") {
+      return "500자 이상 700자 이하, 3~4개의 완결된 문장으로 작성하라.";
+    }
+
     return "250자 이상 700자 이하, 2~4개의 완결된 문장으로 작성하라.";
   }
 
@@ -113,6 +125,7 @@ function buildSubjectPrompt(payload: Extract<RecordFormPayload, { mode: "subject
     "세부능력 및 특기사항 초안을 작성하라.",
     "과목 수행, 단원 활동, 실습 과정, 역량, 문제 해결 과정을 중심으로 작성한다.",
     lengthInstruction(payload),
+    payload.writingStyle ? `문체는 '${payload.writingStyle}'에 맞추되, 학생부 공식 문체의 절제와 객관성을 유지한다.` : "",
     "아래 입력 근거에 없는 활동, 성취, 태도, 평가 결과는 절대 추가하지 않는다.",
     "보완점은 낙인 표현이 아니라 지도와 개선 가능성 중심으로 절제하여 표현한다.",
     "",
@@ -130,11 +143,13 @@ function buildSubjectPrompt(payload: Extract<RecordFormPayload, { mode: "subject
     `과목명: ${payload.subjectName}`,
     `교과서: ${payload.textbook || "입력 없음"}`,
     `단원: ${payload.unit || "입력 없음"}`,
+    payload.lengthOption ? `분량: ${payload.lengthOption}` : "",
+    payload.writingStyle ? `문체: ${payload.writingStyle}` : "",
     `활동 유형: ${payload.activityTypes.join(", ") || "입력 없음"}`,
     `역량: ${payload.competencies.join(", ") || "입력 없음"}`,
     `보완점: ${payload.improvements.join(", ") || "입력 없음"}`,
     `교사 관찰 메모: ${payload.observationMemo}`
-  ];
+  ].filter(Boolean);
 
   const curriculumStandardsSection = buildCurriculumStandardsSection(options?.curriculumStandards);
   if (curriculumStandardsSection) {

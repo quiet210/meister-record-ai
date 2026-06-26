@@ -2,6 +2,7 @@ import {
   activityTypeOptions,
   competencyOptions,
   departmentOptions as fallbackDepartmentOptions,
+  improvementOptions,
   industrialAttitudeOptions,
   schoolLifeAreaOptions,
   subjectOptions as fallbackSubjectOptions
@@ -25,6 +26,7 @@ export type SubjectOption = {
 export type ChecklistCategoryKey =
   | "subject_activity_type"
   | "subject_competency"
+  | "subject_improvement"
   | "behavior_life_attitude"
   | "behavior_collaboration"
   | "behavior_leadership"
@@ -55,6 +57,7 @@ export type SettingsOptions = {
   departmentOptions: DepartmentOption[];
   subjectOptions: string[];
   subjectChecklistGroups: ChecklistGroup[];
+  subjectImprovementOptions: string[];
   behaviorSchoolLifeChecklistGroups: ChecklistGroup[];
   behaviorIndustrialChecklistGroups: ChecklistGroup[];
 };
@@ -121,6 +124,13 @@ const checklistCategoryDefinitions = [
     label: "역량 키워드",
     sortOrder: 20,
     fallbackItems: [...competencyOptions]
+  },
+  {
+    key: "subject_improvement",
+    mode: "subject",
+    label: "보완점",
+    sortOrder: 30,
+    fallbackItems: [...improvementOptions]
   },
   {
     key: "behavior_life_attitude",
@@ -237,6 +247,7 @@ function buildGroups(keys: ChecklistCategoryKey[], categories: ChecklistCategory
 
 export function getFallbackSettingsOptions(): SettingsOptions {
   const subjectGroups = buildGroups(subjectChecklistCategoryKeys, [], new Map());
+  const subjectImprovementGroup = buildGroups(["subject_improvement"], [], new Map())[0];
   const behaviorSchoolLifeGroups = buildGroups(behaviorSchoolLifeChecklistCategoryKeys, [], new Map());
   const behaviorIndustrialGroups = buildGroups(behaviorIndustrialChecklistCategoryKeys, [], new Map());
 
@@ -248,6 +259,7 @@ export function getFallbackSettingsOptions(): SettingsOptions {
     })),
     subjectOptions: [...fallbackSubjectOptions],
     subjectChecklistGroups: subjectGroups,
+    subjectImprovementOptions: subjectImprovementGroup?.options || [...improvementOptions],
     behaviorSchoolLifeChecklistGroups: behaviorSchoolLifeGroups,
     behaviorIndustrialChecklistGroups: behaviorIndustrialGroups
   };
@@ -323,6 +335,8 @@ export async function loadSettingsOptions(): Promise<SettingsOptions> {
     itemsByKey.set(category.key, current);
   });
 
+  const subjectImprovementGroup = buildGroups(["subject_improvement"], categoryRows, itemsByKey)[0];
+
   return {
     departmentOptions:
       departmentRows.length > 0
@@ -335,6 +349,7 @@ export async function loadSettingsOptions(): Promise<SettingsOptions> {
         : fallback.departmentOptions,
     subjectOptions: subjectRows.length > 0 ? subjectRows.map((row) => row.subject_name) : fallback.subjectOptions,
     subjectChecklistGroups: buildGroups(subjectChecklistCategoryKeys, categoryRows, itemsByKey),
+    subjectImprovementOptions: subjectImprovementGroup?.options || fallback.subjectImprovementOptions,
     behaviorSchoolLifeChecklistGroups: buildGroups(behaviorSchoolLifeChecklistCategoryKeys, categoryRows, itemsByKey),
     behaviorIndustrialChecklistGroups: buildGroups(behaviorIndustrialChecklistCategoryKeys, categoryRows, itemsByKey)
   };

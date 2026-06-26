@@ -60,11 +60,13 @@ export function collectEvidence(payload: RecordFormPayload) {
     `과목명: ${payload.subjectName}`,
     `교과서: ${payload.textbook || "입력 없음"}`,
     `단원: ${payload.unit || "입력 없음"}`,
+    payload.lengthOption ? `분량: ${payload.lengthOption}` : "",
+    payload.writingStyle ? `문체: ${payload.writingStyle}` : "",
     `활동 유형: ${payload.activityTypes.join(", ") || "입력 없음"}`,
     `역량: ${payload.competencies.join(", ") || "입력 없음"}`,
     `보완점: ${payload.improvements.join(", ") || "입력 없음"}`,
     `관찰 메모: ${payload.observationMemo}`
-  ];
+  ].filter(Boolean);
 }
 
 export function inspectDraft(draft: string) {
