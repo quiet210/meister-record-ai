@@ -21,6 +21,7 @@ type CurriculumStandardRow = {
 
 type GetCurriculumStandardsBySubjectOptions = {
   schoolId?: string;
+  limit?: number;
 };
 
 type SubjectCurriculumSelectionInput = Omit<SubjectRecordFormPayload, "mode">;
@@ -243,7 +244,7 @@ export async function getCurriculumStandardsBySubject(subjectName: string, optio
     };
   }
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from("curriculum_standards")
     .select(standardColumns, { count: "exact" })
     .eq("school_id", schoolId)
@@ -251,6 +252,12 @@ export async function getCurriculumStandardsBySubject(subjectName: string, optio
     .eq("subject_name", normalizedSubjectName)
     .order("unit_name", { ascending: true })
     .order("sort_order", { ascending: true });
+
+  if (options?.limit && Number.isFinite(options.limit) && options.limit > 0) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error, count } = await query;
 
   if (error) {
     return {
