@@ -193,6 +193,8 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     return {
       mode: "subject",
       schoolId,
+      selectedStudentId,
+      studentNo: selectedStudent?.number,
       studentName: selectedStudent?.name,
       grade,
       department,
