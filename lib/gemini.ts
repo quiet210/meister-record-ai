@@ -45,7 +45,7 @@ const fallbackGeminiModel = "gemini-2.5-flash";
 const maxGenerationAttempts = 2;
 const minDraftChars = 250;
 const maxDraftChars = 700;
-const maxCurriculumPromptStandards = 5;
+const maxCurriculumPromptStandards = 3;
 
 function buildSystemInstruction() {
   return [
