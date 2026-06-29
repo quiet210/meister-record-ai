@@ -84,7 +84,7 @@ export function KnowledgeUpload() {
   const canUpload = Boolean(file && subjectName.trim());
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <section className="space-y-2">
         <p className="text-sm font-semibold text-blue-700">RAG 지식베이스</p>
         <h1 className="text-2xl font-bold tracking-normal text-slate-950">문서 업로드</h1>
@@ -94,8 +94,8 @@ export function KnowledgeUpload() {
         </p>
       </section>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="panel p-4 sm:p-5">
+      <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+        <section className="panel min-w-0 p-4 sm:p-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="space-y-2 sm:col-span-2">
               <span className="field-label">파일</span>
@@ -172,7 +172,7 @@ export function KnowledgeUpload() {
           </button>
         </section>
 
-        <aside className="panel p-4 sm:p-5">
+        <aside className="panel min-w-0 p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
               <ShieldCheck size={20} aria-hidden="true" />

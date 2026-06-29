@@ -37,9 +37,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 text-slate-950 lg:pb-0">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 pb-20 text-slate-950 lg:pb-0">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 lg:px-6">
+        <div className="mx-auto flex w-full max-w-[1760px] items-center justify-between px-4 py-3 lg:px-6">
           <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
               <BookOpenCheck size={20} aria-hidden="true" />
@@ -50,8 +50,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-5 lg:grid-cols-[220px_1fr] lg:px-6 lg:py-6">
-        <aside className="hidden lg:block">
+      <div className="mx-auto grid w-full max-w-[1760px] grid-cols-1 gap-5 px-4 py-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:px-6 lg:py-6 xl:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="hidden min-w-0 lg:block">
           <nav className="sticky top-20 space-y-1">
             {visibleNavItems.map((item) => {
               const Icon = item.icon;
@@ -68,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
         </aside>
-        <main>{children}</main>
+        <main className="min-w-0">{children}</main>
       </div>
 
       <nav

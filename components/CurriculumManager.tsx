@@ -426,7 +426,7 @@ export function CurriculumManager() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <section className="panel p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -446,8 +446,8 @@ export function CurriculumManager() {
         {error ? <p className="mt-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">{error}</p> : null}
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,420px)_1fr]">
-        <div className="space-y-5">
+      <section className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-5">
           {isAdmin ? (
             <section className="panel p-4 sm:p-5">
               <div className="flex items-start justify-between gap-3">
@@ -563,7 +563,7 @@ export function CurriculumManager() {
           </section>
         </div>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <section className="panel p-4 sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-start gap-3">

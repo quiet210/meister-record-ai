@@ -561,7 +561,7 @@ export function BulkSubjectCommentComposer() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
+    <div className="min-w-0 space-y-5">
       <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-blue-700">AI 학생부 작성</p>
@@ -570,7 +570,7 @@ export function BulkSubjectCommentComposer() {
             학생을 여러 명 선택하고 학생별 활동유형, 역량, 보완점, 관찰 메모를 다르게 입력해 과세특 초안을 생성합니다.
           </p>
         </div>
-        <div className="grid grid-cols-4 gap-2 rounded-md border border-slate-200 bg-white p-3 text-center shadow-sm">
+        <div className="grid w-full grid-cols-4 gap-2 rounded-md border border-slate-200 bg-white p-3 text-center shadow-sm sm:w-auto">
           <div>
             <p className="text-xs font-semibold text-slate-500">선택</p>
             <p className="mt-1 text-sm font-bold text-slate-900">{selectedStudents.length}</p>
@@ -716,7 +716,7 @@ export function BulkSubjectCommentComposer() {
         </div>
       </section>
 
-      <section className="panel overflow-hidden">
+      <section className="panel min-w-0 overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-950">학생별 입력 테이블</h2>
@@ -751,18 +751,18 @@ export function BulkSubjectCommentComposer() {
 
         {message ? <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700">{message}</div> : null}
 
-        <div className="max-h-[72vh] overflow-auto">
-          <table className="min-w-[1320px] divide-y divide-slate-200 text-sm">
+        <div className="max-h-[72vh] w-full overflow-x-auto overflow-y-auto overscroll-x-contain">
+          <table className="w-full min-w-[1180px] divide-y divide-slate-200 text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs font-bold uppercase tracking-normal text-slate-500 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
               <tr>
-                <th className="w-16 px-4 py-3">선택</th>
-                <th className="w-48 px-4 py-3">학생명</th>
-                <th className="w-56 px-4 py-3">활동유형</th>
-                <th className="w-56 px-4 py-3">역량키워드</th>
-                <th className="w-48 px-4 py-3">보완점</th>
-                <th className="w-[320px] px-4 py-3">교사 관찰 메모</th>
-                <th className="w-28 px-4 py-3">상태</th>
-                <th className="w-32 px-4 py-3">작업</th>
+                <th className="w-14 px-3 py-3">선택</th>
+                <th className="w-40 px-3 py-3">학생명</th>
+                <th className="w-44 px-3 py-3">활동유형</th>
+                <th className="w-44 px-3 py-3">역량키워드</th>
+                <th className="w-36 px-3 py-3">보완점</th>
+                <th className="w-[260px] px-3 py-3">교사 관찰 메모</th>
+                <th className="w-24 px-3 py-3">상태</th>
+                <th className="w-28 px-3 py-3">작업</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
@@ -791,7 +791,7 @@ export function BulkSubjectCommentComposer() {
 
                 return (
                   <tr key={student.id} className={`align-top ${selected ? "bg-blue-50/30" : ""}`}>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <input
                         type="checkbox"
                         className="mt-1 h-4 w-4"
@@ -801,7 +801,7 @@ export function BulkSubjectCommentComposer() {
                         aria-label={`${student.name} 선택`}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <p className="font-bold text-slate-950">
                         {student.className} {student.number}번 {student.name}
                       </p>
@@ -820,7 +820,7 @@ export function BulkSubjectCommentComposer() {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <ChipSelector
                         label="활동유형"
                         options={activityOptions}
@@ -831,7 +831,7 @@ export function BulkSubjectCommentComposer() {
                         showLabel={false}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <ChipSelector
                         label="역량키워드"
                         options={competencyOptions}
@@ -842,7 +842,7 @@ export function BulkSubjectCommentComposer() {
                         showLabel={false}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <ChipSelector
                         label="보완점"
                         options={settingsOptions.subjectImprovementOptions}
@@ -853,7 +853,7 @@ export function BulkSubjectCommentComposer() {
                         showLabel={false}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <textarea
                         className="input-base min-h-28 resize-y leading-6"
                         placeholder="학생별 관찰 내용을 입력하세요."
@@ -862,14 +862,14 @@ export function BulkSubjectCommentComposer() {
                         disabled={isRowGenerating}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>
                         {input.status === "generating" ? <Loader2 className="mr-1 animate-spin" size={13} aria-hidden="true" /> : null}
                         {statusMeta.label}
                       </span>
                       {input.savedMessage ? <p className="mt-2 text-xs font-semibold text-emerald-700">{input.savedMessage}</p> : null}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <div className="grid gap-2">
                         <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => copyPreviousStudentValues(student.id)} disabled={isGenerating}>
                           <Copy size={15} aria-hidden="true" />

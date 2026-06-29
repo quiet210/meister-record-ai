@@ -317,7 +317,7 @@ export function StudentManager() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <section>
         <p className="text-sm font-semibold text-blue-700">학생 관리</p>
         <h1 className="mt-1 text-2xl font-bold tracking-normal text-slate-950">작성 대상 학생</h1>

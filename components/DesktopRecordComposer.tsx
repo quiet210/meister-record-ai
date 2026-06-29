@@ -17,7 +17,7 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
   const { settingsOptions } = props;
 
   return (
-    <div className="mx-auto hidden max-w-7xl space-y-6 lg:block">
+    <div className="hidden min-w-0 space-y-6 lg:block">
       <section className="flex items-end justify-between gap-6">
         <div>
           <p className="text-sm font-semibold text-blue-700">AI 학생부 작성</p>
@@ -32,8 +32,8 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
         </div>
       </section>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_430px] gap-6">
-        <div className="space-y-5">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(320px,400px)] gap-5 2xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="min-w-0 space-y-5">
           <section className="panel p-5">
             <div className="mb-4 flex items-center justify-between gap-4">
               <div>
@@ -221,7 +221,7 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
           </section>
         </div>
 
-        <aside className="lg:sticky lg:top-6 lg:self-start">
+        <aside className="min-w-0 lg:sticky lg:top-6 lg:self-start">
           <GeneratedResultCard
             mode={mode}
             result={props.result}
