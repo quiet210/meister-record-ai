@@ -1,12 +1,12 @@
 # Project Status
 
-최종 업데이트: 2026-06-26
+최종 업데이트: 2026-06-29
 
 ## 현재 상태 요약
 
 공업계 마이스터고 학생부 작성 지원 플랫폼은 Next.js 15 App Router, TypeScript, TailwindCSS, Supabase Auth/DB, Gemini API, Vercel 기반으로 동작한다.
 
-현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 과세특 일괄 생성, 행동특성 및 종합의견 생성, 행동특성 및 종합의견 일괄 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영과 학생별 분산 선택 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다.
+현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 과세특 일괄 생성, 행동특성 및 종합의견 생성, 행동특성 및 종합의견 일괄 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영과 학생별 분산 선택, 일괄 생성 결과 품질 관리 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다. 데스크톱 레이아웃은 `AppShell` 중심의 넓은 앱 컨테이너와 `min-w-0`/내부 테이블 스크롤 구조로 정리되어 페이지 전체 가로 스크롤이 발생하지 않도록 조정했다.
 
 ## 현재 완료 기능
 
@@ -41,6 +41,15 @@
 - `/bulk-behavior-comment` 행동특성 및 종합의견 일괄 생성 화면 추가 완료
 - 행동특성 일괄 생성 학생별 입력/상태/결과/복사/실패 재시도 구현 완료
 - 행동특성 일괄 생성 동시 API 호출 수 3개 제한 및 `record_drafts.mode = behavior` 자동 저장 완료
+- 과세특/행동특성 일괄 생성 결과 중복도 자동 분석 완료
+- 생성 결과 영역에 학생명, 유사도, 복사, 재생성, 상태 표시 완료
+- 유사도 기준별 정상/유사/중복 의심 표시 완료
+- 중복 의심 학생만 체크박스로 선택해 기존 생성 API를 재호출하는 선택 재생성 완료
+- 재생성 시 `record_drafts` 최신 row 업데이트 저장 경로 완료
+- 데스크톱 레이아웃 가로 스크롤 문제 개선 완료
+- `AppShell`, `Dashboard`, `RecordComposer`, `BulkSubjectCommentComposer`, `BulkBehaviorCommentComposer`, `StudentManager`, 공통 레이아웃 폭/스크롤 구조 점검 완료
+- 학생별 입력 테이블은 필요한 경우 내부 컨테이너에서만 가로 스크롤되도록 조정 완료
+- `/dashboard`, `/bulk-subject-comment`, `/bulk-behavior-comment` Tailwind 스타일 및 페이지 overflow 정상 확인 완료
 - Vercel TypeScript 빌드 오류 대응 완료
 - `npm run typecheck` 통과
 - `npm run build` 통과
@@ -119,6 +128,26 @@
   - 생성 결과 복사와 실패 학생 재생성 가능
   - 생성 성공 시 `saveRecordDraft()`로 `record_drafts`에 `mode=behavior` 저장
   - 실패한 학생만 다시 생성 가능
+- 생성 품질 관리:
+  - 과세특/행동특성 일괄 생성 완료 후 이번 생성에서 성공한 학생 초안만 비교
+  - 학생 이름을 제거한 초안 텍스트를 단어 토큰과 문자 2~3gram 벡터로 변환한 뒤 cosine similarity 계산
+  - 각 학생은 같은 생성 묶음 안에서 가장 유사한 다른 학생과의 최고 유사도를 표시
+  - 85% 이상은 빨간색 `중복 의심`, 70~84%는 노란색 `유사`, 70% 미만은 `정상`
+  - 결과 영역은 학생명, 유사도, 복사, 재생성, 상태를 함께 표시
+  - `중복 의심` 학생만 체크박스로 선택 가능하며, `선택 학생 재생성`으로 기존 과세특/행동특성 생성 API를 다시 호출
+  - 과세특 재생성은 기존 성취기준 조회, 관련도 기반 선택, 학생 seed 기반 분산 로직을 변경하지 않고 같은 payload로 재호출
+  - 재생성 저장은 같은 교사/학생/mode의 최신 `record_drafts` row를 update하고, 기존 row가 없으면 insert로 fallback
+
+### 레이아웃과 스타일 안정화
+
+- 공통 `AppShell`을 `max-w-[1760px]`, `w-full`, `grid-cols-[220px_minmax(0,1fr)]`, `main min-w-0` 중심 구조로 정리했다.
+- `html`, `body`, 최상위 앱 래퍼에는 페이지 전체 가로 overflow를 막는 `overflow-x-hidden`을 적용했다.
+- `Dashboard`, `StudentManager`, `KnowledgeUpload`, `CurriculumManager`, `DesktopRecordComposer` 등 주요 화면 루트와 grid 자식에 `min-w-0`을 보강했다.
+- `DesktopRecordComposer`는 결과 패널을 고정 430px 대신 `minmax(320px,400px)`/`2xl:420px` 구조로 조정해 데스크톱 폭을 더 자연스럽게 사용한다.
+- `/bulk-subject-comment` 학생별 입력 테이블은 `w-full min-w-[1180px]`와 내부 `overflow-x-auto` 컨테이너를 사용한다.
+- `/bulk-behavior-comment` 학생별 입력 테이블은 컬럼 수가 많으므로 `w-full min-w-[1440px]`와 내부 `overflow-x-auto` 컨테이너를 사용한다.
+- 1440px 기준 `/dashboard`, `/bulk-subject-comment`, `/bulk-behavior-comment`에서 페이지 전체 가로 overflow가 없고 Tailwind 패널/버튼 스타일이 정상 적용됨을 확인했다.
+- `npm run build`를 실행하는 동안 기존 `next dev` 서버가 같은 `.next` 산출물을 사용 중이면 개발 서버의 CSS/청크가 깨질 수 있다. 빌드 검증 후 개발 화면이 기본 HTML처럼 보이면 dev 서버를 종료하고 다시 실행한다.
 
 ### 관리자 설정 기능
 
@@ -210,6 +239,8 @@ Gemini 생성 프롬프트 반영
 - 과세특 생성 시 선택 과목 기준으로 active 성취기준 전체 후보를 조회하고 관련도 기반 + seed 랜덤 분산 선택으로 최대 3개를 Gemini 프롬프트에 반영 완료
 - 과세특 일괄 생성도 기존 과세특 생성 API를 학생별로 호출하므로 동일한 성취기준 조회/관련도/seed 분산 선택 흐름을 그대로 사용
 - 행동특성 일괄 생성은 기존 행동특성 생성 API를 학생별로 호출하고, 과목명/단원명/성취기준 없이 생활 관찰 입력만 사용
+- 과세특/행동특성 일괄 생성 후 생성 성공 초안만 대상으로 같은 생성 묶음 내부 유사도를 분석
+- 중복 의심 학생 선택 재생성은 기존 생성 API를 재호출하고 `record_drafts` 최신 row를 업데이트
 - 성취기준 후보가 3개 이하이면 전부 사용하고, 후보가 없으면 기존 생성 흐름 유지
 
 ## 현재 사용 중인 주요 테이블
@@ -252,6 +283,8 @@ Supabase Auth 사용자와 앱 프로필을 연결한다.
 - `input_payload`
 - `result_payload`
 - `draft_text`
+- `updated_at`: 품질 재생성으로 최신 초안 row가 수정된 시각
+- 품질 재생성 저장은 같은 `school_id`, `user_id`, `student_id`, `mode`의 최신 row를 update한다.
 
 ### departments
 
@@ -321,6 +354,7 @@ supabase/migrations/20260622_auth_students.sql
 supabase/migrations/20260622_admin_settings.sql
 supabase/migrations/20260624_curriculum.sql
 supabase/migrations/20260625_unify_subject_master.sql
+supabase/migrations/20260629_record_draft_quality_updates.sql
 ```
 
 `20260622_auth_students.sql`:
@@ -365,6 +399,13 @@ supabase/migrations/20260625_unify_subject_master.sql
 - 기존 `subjects` 데이터를 `school_id + subject_name` 기준으로 `curriculum_subjects`에 이전
 - 기존 `curriculum_subjects`에 같은 `school_id + subject_name` 과목이 있으면 기존 데이터를 유지
 
+`20260629_record_draft_quality_updates.sql`:
+
+- `record_drafts.updated_at` 컬럼 추가
+- `record_drafts` update 시각 자동 갱신 트리거 추가
+- 같은 교사/학생/mode 최신 초안 조회용 인덱스 추가
+- 품질 재생성 저장을 위한 본인 소유 `record_drafts` update RLS 정책 추가
+
 ## 최근 해결한 문제
 
 - GitHub 업로드 경로 문제
@@ -404,6 +445,17 @@ supabase/migrations/20260625_unify_subject_master.sql
   - Vercel 빌드에서 과거 호출 형태가 섞여도 깨지지 않도록 `lib/curriculum-server.ts`의 `GetCurriculumStandardsBySubjectOptions`에 선택적 `limit`을 추가했다.
   - `limit`이 유효한 양수일 때만 Supabase 쿼리에 `.limit()`을 적용한다.
   - 로컬 기준 `npm run typecheck`와 `npm run build` 통과를 확인했다.
+- 데스크톱 가로 스크롤 및 Tailwind 스타일 깨짐 대응
+  - 원인은 `AppShell`의 기존 `1fr` 메인 컬럼과 일괄 입력 테이블의 넓은 `min-w-*` 조합이 페이지 전체 폭을 밀 수 있는 구조였다.
+  - `AppShell`을 `minmax(0,1fr)` 기반으로 바꾸고, 주요 콘텐츠 루트에 `min-w-0`을 적용했다.
+  - 일괄 입력 테이블은 페이지 전체가 아니라 테이블 컨테이너 내부에서만 가로 스크롤되도록 조정했다.
+  - Tailwind 전역 import는 `app/globals.css`에서 정상 유지됨을 확인했다.
+  - 개발 화면이 기본 HTML처럼 보인 현상은 코드 문제가 아니라 `npm run build`와 실행 중인 `next dev`가 `.next` 산출물을 동시에 사용하며 생긴 dev 서버 상태 꼬임으로 확인했다.
+  - dev 서버 재시작 후 `/dashboard`, `/bulk-subject-comment`, `/bulk-behavior-comment`에서 패널/카드/버튼 스타일 정상 적용과 페이지 전체 가로 overflow 없음 확인을 완료했다.
+- AI 생성 결과 품질 관리 추가
+  - 기존 과세특/행동특성 생성 API는 수정하지 않고, 일괄 생성 화면의 성공 결과 후처리로 유사도를 분석한다.
+  - 이번 생성 묶음에서 성공한 초안만 비교해 기존 저장 데이터나 다른 학생 CRUD 흐름에 영향을 주지 않는다.
+  - 중복 의심 학생 선택 재생성은 같은 API를 다시 호출하고, 저장 단계에서만 `record_drafts` 최신 row를 갱신한다.
 
 ## 주요 파일
 
@@ -465,6 +517,8 @@ Auth/Supabase:
 - `lib/curriculum-server.ts`
 - `lib/gemini.ts`
 - `lib/types.ts`
+- `lib/draft-quality.ts`
+- `lib/record-drafts.ts`
 
 ## 실행 및 검증 명령
 
@@ -473,6 +527,11 @@ npm run typecheck
 npm run build
 npm run dev -- --port 3002
 ```
+
+주의:
+
+- `npm run build`는 검증용으로 실행하고, 이후 개발 서버 화면을 계속 확인해야 하면 기존 `next dev` 서버를 재시작한다.
+- 실행 중인 dev 서버와 build가 같은 `.next` 디렉터리를 공유하면 개발 화면의 CSS/청크가 일시적으로 깨질 수 있다.
 
 ## 배포 상태
 
@@ -535,8 +594,13 @@ Gemini 프롬프트 주입
 - `/bulk-subject-comment`의 화면 우선순위는 공통 설정, 학생별 입력 테이블, 생성 버튼, 생성 결과, 일괄 적용 보조 기능 순서로 유지한다.
 - 행동특성 일괄 생성은 기존 단일 행동특성 생성 API를 학생별로 재사용하며, 클라이언트에서 동시 실행 수를 3개로 제한한다.
 - 행동특성 일괄 생성 성공 결과는 `record_drafts`에 `mode=behavior`로 자동 저장한다.
+- 생성 품질 관리는 기존 생성 API, 학생 CRUD, 관리자 기능, 성취기준 조회 로직을 수정하지 않고 일괄 생성 UI 후처리와 저장 함수 옵션으로만 연결한다.
+- 중복도 분석 대상은 이번 생성에서 성공한 학생 초안으로 제한한다.
+- 중복 의심 선택 재생성은 기존 payload를 사용해 같은 생성 API를 재호출하고, 재생성 결과만 `record_drafts` 최신 row update 저장을 사용한다.
 - `/bulk-behavior-comment`에는 과목명, 단원명, 성취기준 입력을 두지 않는다.
 - `/bulk-behavior-comment`의 화면 우선순위는 공통 설정, 학생별 입력 테이블, 생성 버튼, 생성 결과, 일괄 적용 보조 기능 순서로 유지한다.
+- 레이아웃 변경은 기능 로직을 건드리지 않고 Tailwind class, 컨테이너 폭, grid/flex 최소 폭, overflow 경계만 조정한다.
+- 학생별 입력 테이블은 컬럼 수가 많으므로 테이블 내부 가로 스크롤은 허용하지만 페이지 전체 가로 스크롤은 허용하지 않는다.
 
 ## 다음 채팅에서 작업할 때 주의사항
 
@@ -548,6 +612,7 @@ Gemini 프롬프트 주입
 - `settingsOptions` fallback 흐름 유지
 - GitHub 업로드 시 폴더 구조 유지
 - 코드 변경 후에는 `npm run typecheck`와 `npm run build` 확인
+- `npm run build` 후 개발 서버 화면 스타일이 깨지면 dev 서버 재시작
 
 ## 현재 주의할 점
 

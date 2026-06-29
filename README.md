@@ -29,6 +29,8 @@
 - 과세특 일괄 생성
 - 행동특성 생성
 - 행동특성 일괄 생성
+- AI 생성 결과 중복도 분석
+- 중복 의심 학생 선택 재생성
 - 관리자 기능
 - 학과 관리
 - 과목/성취기준 관리
@@ -70,7 +72,18 @@
 - 행동특성 및 종합의견 일괄 생성 화면 `/bulk-behavior-comment` 추가 완료
 - 행동특성 일괄 생성 시 학생별 payload를 기존 행동특성 생성 API로 호출하고 동시 호출 수를 3개로 제한
 - 행동특성 일괄 생성 성공 결과를 `record_drafts`에 `mode=behavior`로 자동 저장
+- 과세특/행동특성 일괄 생성 완료 후 이번 생성 묶음 안에서 초안 유사도 자동 분석 완료
+- 생성 결과 영역에 학생명, 유사도, 상태, 복사, 재생성 UI 표시 완료
+- 유사도 85% 이상은 빨간색 `중복 의심`, 70~84%는 노란색 `유사`, 70% 미만은 정상으로 표시
+- 중복 의심 학생만 체크박스로 선택해 기존 생성 API를 다시 호출하는 선택 재생성 기능 완료
+- 재생성 결과는 `record_drafts`의 최신 학생별 초안 row를 업데이트하도록 저장 경로 보강 완료
+- 데스크톱 레이아웃 가로 스크롤 문제 개선 완료
+- `AppShell`과 주요 콘텐츠 영역을 일반 웹 애플리케이션 형태의 반응형 레이아웃으로 정리 완료
+- 학생별 입력 테이블은 페이지 전체가 아니라 테이블 컨테이너 내부에서만 가로 스크롤되도록 조정 완료
+- `/dashboard`, `/bulk-subject-comment`, `/bulk-behavior-comment` Tailwind 스타일 및 레이아웃 정상 표시 확인 완료
 - Vercel TypeScript 빌드 오류 대응 완료
+- `npm run typecheck` 통과
+- `npm run build` 통과
 
 ## 주요 화면
 
@@ -108,6 +121,12 @@ npm run dev -- --port 3002
 npm run typecheck
 npm run build
 ```
+
+로컬 개발 서버 주의:
+
+- `npm run build`를 실행할 때 기존 `next dev` 서버가 같은 프로젝트의 `.next` 산출물을 사용 중이면 개발 서버 화면의 CSS/청크가 일시적으로 깨질 수 있습니다.
+- 빌드 검증 후 개발 화면이 기본 HTML처럼 보이면 기존 dev 서버를 종료하고 `npm run dev -- --port 3002`로 다시 실행합니다.
+- 가로 스크롤 검증은 `/dashboard`, `/bulk-subject-comment`, `/bulk-behavior-comment`에서 페이지 전체 overflow가 없는지 확인합니다. 일괄 입력 테이블은 필요한 경우 테이블 내부에서만 가로 스크롤됩니다.
 
 ## 환경변수 설명
 
@@ -167,7 +186,7 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 - `public.users`: Supabase Auth 사용자와 연결되는 앱 사용자 프로필입니다. `role`은 `admin` 또는 `teacher`입니다.
 - `public.students`: 학교별 학생 정보입니다.
-- `public.record_drafts`: 생성된 과세특/행동특성 초안 저장 테이블입니다.
+- `public.record_drafts`: 생성된 과세특/행동특성 초안 저장 테이블입니다. 품질 재생성 시 같은 교사/학생/mode의 최신 row를 업데이트합니다.
 - `public.departments`: 학교별 학과 설정입니다.
 - `public.subjects`: deprecated된 기존 과목 설정 테이블입니다. 즉시 삭제하지 않고 데이터 보존과 이전 호환용으로만 유지합니다.
 - `public.curriculum_subjects`: 단일 과목 마스터 테이블입니다. 과목명, 교과유형, 설명, 정렬순서를 저장합니다.
@@ -197,10 +216,16 @@ Gemini 생성 프롬프트 반영
 - 과세특 생성 시 선택 과목 기준 active 성취기준 전체 후보를 조회하고, 학생 입력값과의 관련도 및 seed 기반 랜덤성을 적용해 최대 3개를 Gemini 프롬프트에 반영
 - 과세특 일괄 생성은 학생별 `selectedStudentId`, `studentNo`, 이름, 학년, 학과와 개별 활동유형/역량/보완점/교사 관찰 메모를 payload에 포함해 기존 과세특 생성 API를 재사용
 - 과세특 일괄 생성 화면은 공통 설정을 상단에 두고, 학생별 입력 테이블에서 선택 체크박스/활동유형/역량키워드/보완점/교사 관찰 메모/상태/작업을 한 행에서 바로 처리
-- 생성 결과는 학생별 입력 테이블 아래 별도 영역에 표시하고, 실패한 학생만 재생성할 수 있음
+- 생성 결과는 학생별 입력 테이블 아래 별도 영역에 표시하고, 학생명/유사도/복사/재생성/상태를 함께 확인할 수 있음
 - 행동특성 일괄 생성은 `/bulk-behavior-comment`에서 학년/반/학과 필터와 분량/문체/작성 관점을 공통 설정으로 관리
 - 행동특성 일괄 생성 화면은 학생별 입력 테이블에서 학교생활 영역, 생활태도 키워드, 협업/관계, 책임감/성실성, 보완점, 담임 관찰 메모를 한 행에서 직접 입력
 - 행동특성 일괄 생성은 기존 `/api/generate/behavior-comment` API를 학생별로 재사용하며, 브라우저에서 동시 실행 수를 3개로 제한하고 성공 시 `record_drafts.mode = behavior`로 저장
+- 과세특/행동특성 일괄 생성이 끝나면 이번 생성에서 성공한 학생 초안만 대상으로 학생 이름을 제거한 텍스트를 문자 2~3gram/단어 벡터로 변환하고 cosine similarity를 계산
+- 각 학생은 같은 생성 묶음 안에서 가장 유사한 다른 학생과의 최고 유사도를 표시
+- 품질 상태 기준은 85% 이상 `중복 의심`, 70~84% `유사`, 70% 미만 `정상`
+- `중복 의심` 학생만 결과 영역의 체크박스로 선택 가능하며, `선택 학생 재생성`은 기존 과세특/행동특성 생성 API를 그대로 다시 호출
+- 선택 재생성은 기존 성취기준 조회, 관련도 기반 선택, 학생 seed 기반 분산 로직을 변경하지 않고 기존 payload로 재호출
+- 재생성 저장은 `record_drafts`에서 같은 교사/학생/mode의 최신 row를 찾아 최신 초안으로 update하고, 기존 row가 없으면 insert로 fallback
 - 성취기준 후보가 3개 이하이면 전부 사용하고, 후보가 없거나 조회를 건너뛰면 기존 과세특 생성 흐름으로 계속 동작
 
 적용할 주요 마이그레이션:
@@ -210,6 +235,7 @@ supabase/migrations/20260622_auth_students.sql
 supabase/migrations/20260622_admin_settings.sql
 supabase/migrations/20260624_curriculum.sql
 supabase/migrations/20260625_unify_subject_master.sql
+supabase/migrations/20260629_record_draft_quality_updates.sql
 ```
 
 권한 구조:
@@ -250,6 +276,11 @@ where email = 'admin@school.kr';
 - `/bulk-subject-comment` 화면 우선순위는 공통 설정, 학생별 입력 테이블, 생성 버튼, 생성 결과, 일괄 적용 보조 기능 순서입니다.
 - 행동특성 일괄 생성은 기존 단일 행동특성 생성 API를 학생별로 재사용하며, 브라우저에서 동시 실행 수를 3개로 제한합니다.
 - `/bulk-behavior-comment`에는 과목명, 단원명, 성취기준 입력을 두지 않고 학생별 생활 관찰 입력만 사용합니다.
+- 생성 품질 관리는 기존 생성 API, 학생 CRUD, 관리자 기능, 성취기준 조회 로직을 수정하지 않고 일괄 생성 결과 후처리와 저장 옵션으로만 연결합니다.
+- 중복도 분석 대상은 이번 생성에서 성공한 학생 초안으로 제한합니다.
+- 중복 의심 선택 재생성은 기존 payload로 같은 생성 API를 재호출하고, 재생성 결과만 `record_drafts` 최신 row update 저장을 사용합니다.
+- 데스크톱 레이아웃은 `AppShell`의 넓은 앱 컨테이너, `main min-w-0`, 반응형 grid/flex, 내부 테이블 스크롤을 기준으로 유지합니다.
+- Tailwind 전역 import(`@tailwind base`, `@tailwind components`, `@tailwind utilities`)는 `app/globals.css`에서 유지합니다.
 
 ### 1순위 다음 작업
 
@@ -282,3 +313,5 @@ Gemini 프롬프트 주입
 - 기존 학생 CRUD는 최소한으로만 수정합니다.
 - 관리자 기능과 `settingsOptions` fallback 흐름을 유지합니다.
 - GitHub 업로드 시 현재 폴더 구조를 유지합니다.
+- 코드 변경 후에는 `npm run typecheck`와 `npm run build`를 확인합니다.
+- `npm run build` 후 개발 서버 화면 스타일이 깨지면 dev 서버를 재시작합니다.
