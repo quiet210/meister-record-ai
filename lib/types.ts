@@ -52,7 +52,9 @@ export type BehaviorRecordFormPayload = {
   industrialAttitudes: string[];
   behaviorImprovements: string[];
   homeroomMemo: string;
-  lengthOption: CommentLength;
+  lengthOption?: string;
+  writingStyle?: string;
+  writingPerspective?: string;
 };
 
 export type RecordFormPayload = SubjectRecordFormPayload | BehaviorRecordFormPayload;
