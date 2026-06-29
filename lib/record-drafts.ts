@@ -7,6 +7,7 @@ type SaveRecordDraftInput = {
   studentId?: string;
   payload: RecordFormPayload;
   result: GenerateResponse;
+  saveMode?: "insert" | "replace-latest";
 };
 
 export async function saveRecordDraft(input: SaveRecordDraftInput) {
@@ -20,7 +21,7 @@ export async function saveRecordDraft(input: SaveRecordDraftInput) {
     return { error: profileResult.error || "사용자 프로필을 찾지 못했습니다." };
   }
 
-  const { error } = await supabase.from("record_drafts").insert({
+  const draftRow = {
     school_id: profileResult.profile.school_id,
     user_id: profileResult.profile.id,
     student_id: input.studentId || null,
@@ -28,7 +29,33 @@ export async function saveRecordDraft(input: SaveRecordDraftInput) {
     input_payload: input.payload,
     result_payload: input.result,
     draft_text: input.result.draft || null
-  });
+  };
+
+  if (input.saveMode === "replace-latest") {
+    let latestDraftQuery = supabase
+      .from("record_drafts")
+      .select("id")
+      .eq("school_id", profileResult.profile.school_id)
+      .eq("user_id", profileResult.profile.id)
+      .eq("mode", input.mode)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    latestDraftQuery = input.studentId ? latestDraftQuery.eq("student_id", input.studentId) : latestDraftQuery.is("student_id", null);
+
+    const { data: latestDrafts, error: latestDraftError } = await latestDraftQuery;
+    if (latestDraftError) {
+      return { error: latestDraftError.message };
+    }
+
+    const latestDraftId = latestDrafts?.[0]?.id;
+    if (latestDraftId) {
+      const { error: updateError } = await supabase.from("record_drafts").update(draftRow).eq("id", latestDraftId);
+      return updateError ? { error: updateError.message } : {};
+    }
+  }
+
+  const { error } = await supabase.from("record_drafts").insert(draftRow);
 
   return error ? { error: error.message } : {};
 }
