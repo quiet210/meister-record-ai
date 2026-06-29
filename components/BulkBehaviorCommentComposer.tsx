@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clipboard, Copy, Loader2, Play, RefreshCcw, Search, Sparkles, UsersRound } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type ChecklistCategoryKey, type SettingsOptions } from "@/lib/admin-settings";
+import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
 import { behaviorImprovementOptions, gradeOptions } from "@/lib/options";
 import { saveRecordDraft } from "@/lib/record-drafts";
 import { ensureUserProfile, listStudents } from "@/lib/students";
@@ -19,6 +20,7 @@ type StudentBehaviorInput = {
   homeroomMemo: string;
   status: BulkStatus;
   result: GenerateResponse | null;
+  quality: DraftSimilarityResult | null;
   error: string;
   savedMessage: string;
 };
@@ -52,6 +54,7 @@ function makeInitialStudentInput(): StudentBehaviorInput {
     homeroomMemo: "",
     status: "waiting",
     result: null,
+    quality: null,
     error: "",
     savedMessage: ""
   };
@@ -195,6 +198,7 @@ export function BulkBehaviorCommentComposer() {
   const [students, setStudents] = useState<Student[]>([]);
   const [studentInputs, setStudentInputs] = useState<Record<string, StudentBehaviorInput>>({});
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [qualitySelectedStudentIds, setQualitySelectedStudentIds] = useState<string[]>([]);
   const [gradeFilter, setGradeFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
@@ -254,6 +258,7 @@ export function BulkBehaviorCommentComposer() {
     ]);
   }, [settingsOptions]);
   const selectedStudentIdSet = useMemo(() => new Set(selectedStudentIds), [selectedStudentIds]);
+  const qualitySelectedStudentIdSet = useMemo(() => new Set(qualitySelectedStudentIds), [qualitySelectedStudentIds]);
 
   const classOptions = useMemo(() => {
     const classes = students
@@ -278,6 +283,14 @@ export function BulkBehaviorCommentComposer() {
   const failedStudents = useMemo(
     () => selectedStudents.filter((student) => studentInputs[student.id]?.status === "failed"),
     [selectedStudents, studentInputs]
+  );
+  const duplicateQualityStudents = useMemo(
+    () => selectedStudents.filter((student) => studentInputs[student.id]?.quality?.status === "duplicate" && Boolean(studentInputs[student.id]?.result?.draft)),
+    [selectedStudents, studentInputs]
+  );
+  const qualityRegenerationStudents = useMemo(
+    () => duplicateQualityStudents.filter((student) => qualitySelectedStudentIdSet.has(student.id)),
+    [duplicateQualityStudents, qualitySelectedStudentIdSet]
   );
   const isGenerating = selectedStudents.some((student) => ["queued", "generating"].includes(studentInputs[student.id]?.status || "waiting"));
   const allFilteredSelected = filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id));
@@ -318,6 +331,7 @@ export function BulkBehaviorCommentComposer() {
             ? {
                 status: "waiting" as BulkStatus,
                 result: null,
+                quality: null,
                 error: "",
                 savedMessage: ""
               }
@@ -385,6 +399,7 @@ export function BulkBehaviorCommentComposer() {
           homeroomMemo: bulkInput.homeroomMemo.trim().length > 0 ? bulkInput.homeroomMemo : previous.homeroomMemo,
           status: "waiting",
           result: null,
+          quality: null,
           error: "",
           savedMessage: ""
         };
@@ -442,6 +457,7 @@ export function BulkBehaviorCommentComposer() {
           homeroomMemo: previousInput.homeroomMemo,
           status: "waiting",
           result: null,
+          quality: null,
           error: "",
           savedMessage: ""
         };
@@ -452,6 +468,42 @@ export function BulkBehaviorCommentComposer() {
     });
 
     setMessage(copiedCount > 0 ? `선택한 ${copiedCount}명에게 바로 이전 행의 입력값을 복사했습니다.` : "복사할 이전 행이 없습니다.");
+  }
+
+  function applyQualityAnalysis(generatedDrafts: DraftSimilarityInput[]) {
+    if (generatedDrafts.length === 0) {
+      setQualitySelectedStudentIds([]);
+      return { analyzedCount: 0, duplicateCount: 0, similarCount: 0 };
+    }
+
+    const qualityResults = analyzeDraftSimilarity(generatedDrafts);
+    const duplicateIds = generatedDrafts
+      .filter((item) => qualityResults[item.studentId]?.status === "duplicate")
+      .map((item) => item.studentId);
+    const similarCount = generatedDrafts.filter((item) => qualityResults[item.studentId]?.status === "similar").length;
+
+    setStudentInputs((current) => {
+      const next = { ...current };
+      generatedDrafts.forEach((item) => {
+        next[item.studentId] = {
+          ...(next[item.studentId] || makeInitialStudentInput()),
+          quality: qualityResults[item.studentId] || null
+        };
+      });
+      return next;
+    });
+    setQualitySelectedStudentIds(duplicateIds);
+
+    return {
+      analyzedCount: generatedDrafts.length,
+      duplicateCount: duplicateIds.length,
+      similarCount
+    };
+  }
+
+  function toggleQualitySelection(studentId: string) {
+    if (studentInputs[studentId]?.quality?.status !== "duplicate") return;
+    setQualitySelectedStudentIds((current) => (current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]));
   }
 
   function buildPayload(student: Student, input: StudentBehaviorInput): BehaviorRecordFormPayload {
@@ -476,13 +528,18 @@ export function BulkBehaviorCommentComposer() {
     };
   }
 
-  async function generateForStudents(targetStudents: Student[]) {
+  async function generateForStudents(
+    targetStudents: Student[],
+    options: { includeCompleted?: boolean; saveMode?: "insert" | "replace-latest" } = {}
+  ) {
+    const saveMode = options.saveMode || "insert";
     const inputSnapshot = new Map(targetStudents.map((student) => [student.id, studentInputs[student.id] || makeInitialStudentInput()]));
     const runnableStudents = targetStudents.filter((student) => {
       const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
-      return input.status !== "completed" && isStudentReady(input);
+      return (options.includeCompleted || input.status !== "completed") && isStudentReady(input);
     });
     const skippedCount = targetStudents.length - runnableStudents.length;
+    const generatedDrafts: DraftSimilarityInput[] = [];
 
     if (runnableStudents.length === 0) {
       setMessage("생성 가능한 학생이 없습니다. 학교생활 영역, 키워드, 담임 메모를 확인하세요.");
@@ -497,6 +554,7 @@ export function BulkBehaviorCommentComposer() {
           ...(next[student.id] || makeInitialStudentInput()),
           status: "queued",
           result: null,
+          quality: null,
           error: "",
           savedMessage: ""
         };
@@ -533,7 +591,8 @@ export function BulkBehaviorCommentComposer() {
           mode: "behavior",
           studentId: student.id,
           payload,
-          result
+          result,
+          saveMode
         });
 
         if (saveResult.error) {
@@ -543,6 +602,7 @@ export function BulkBehaviorCommentComposer() {
               ...(current[student.id] || makeInitialStudentInput()),
               status: "failed",
               result,
+              quality: null,
               error: `저장 실패: ${saveResult.error}`,
               savedMessage: ""
             }
@@ -556,10 +616,16 @@ export function BulkBehaviorCommentComposer() {
             ...(current[student.id] || makeInitialStudentInput()),
             status: "completed",
             result,
+            quality: null,
             error: "",
-            savedMessage: "record_drafts 저장 완료"
+            savedMessage: saveMode === "replace-latest" ? "record_drafts 최신 초안 업데이트 완료" : "record_drafts 저장 완료"
           }
         }));
+        generatedDrafts.push({
+          studentId: student.id,
+          studentName: student.name,
+          draft: result.draft
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : "생성 중 오류가 발생했습니다.";
         setStudentInputs((current) => ({
@@ -567,6 +633,7 @@ export function BulkBehaviorCommentComposer() {
           [student.id]: {
             ...(current[student.id] || makeInitialStudentInput()),
             status: "failed",
+            quality: null,
             error: message,
             savedMessage: ""
           }
@@ -574,7 +641,15 @@ export function BulkBehaviorCommentComposer() {
       }
     });
 
-    setMessage("일괄 생성 작업이 끝났습니다.");
+    const qualitySummary = applyQualityAnalysis(generatedDrafts);
+    if (qualitySummary.analyzedCount > 1) {
+      setMessage(
+        `일괄 생성 작업이 끝났습니다. 이번 생성 ${qualitySummary.analyzedCount}명 기준 중복 의심 ${qualitySummary.duplicateCount}명, 유사 ${qualitySummary.similarCount}명입니다.`
+      );
+      return;
+    }
+
+    setMessage("일괄 생성 작업이 끝났습니다. 비교할 생성 결과가 2명 미만입니다.");
   }
 
   async function generateSelectedStudents() {
@@ -585,9 +660,24 @@ export function BulkBehaviorCommentComposer() {
     await generateForStudents(failedStudents);
   }
 
+  async function regenerateQualitySelectedStudents() {
+    if (qualityRegenerationStudents.length === 0) {
+      setMessage("중복 의심으로 선택된 학생이 없습니다.");
+      return;
+    }
+
+    await generateForStudents(qualityRegenerationStudents, { includeCompleted: true, saveMode: "replace-latest" });
+  }
+
   async function generateSingleStudent(student: Student) {
     setSelectedStudentIds((current) => (current.includes(student.id) ? current : [...current, student.id]));
     await generateForStudents([student]);
+  }
+
+  async function regenerateSingleStudent(student: Student) {
+    setSelectedStudentIds((current) => (current.includes(student.id) ? current : [...current, student.id]));
+    const saveMode = studentInputs[student.id]?.result?.draft ? "replace-latest" : "insert";
+    await generateForStudents([student], { includeCompleted: true, saveMode });
   }
 
   async function copyDraft(studentId: string) {
@@ -931,10 +1021,22 @@ export function BulkBehaviorCommentComposer() {
       </section>
 
       <section className="panel overflow-hidden">
-        <div className="border-b border-slate-200 p-5">
-          <h2 className="text-lg font-bold text-slate-950">생성 결과</h2>
-          <p className="mt-1 text-sm text-slate-500">학생별 생성 결과를 확인하고 복사하거나 실패한 학생만 다시 생성합니다.</p>
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-950">생성 결과</h2>
+            <p className="mt-1 text-sm text-slate-500">학생별 생성 결과와 마지막 생성 묶음 기준 유사도를 확인합니다.</p>
+          </div>
+          <button className="primary-button" type="button" onClick={regenerateQualitySelectedStudents} disabled={qualityRegenerationStudents.length === 0 || isGenerating}>
+            <RefreshCcw size={17} aria-hidden="true" />
+            선택 학생 재생성
+          </button>
         </div>
+
+        {duplicateQualityStudents.length > 0 ? (
+          <div className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800">
+            중복 의심 {duplicateQualityStudents.length}명 중 {qualityRegenerationStudents.length}명이 재생성 대상으로 선택되었습니다.
+          </div>
+        ) : null}
 
         {selectedStudents.length === 0 ? (
           <div className="p-5 text-sm font-semibold text-slate-500">학생을 선택하면 생성 결과가 표시됩니다.</div>
@@ -944,6 +1046,11 @@ export function BulkBehaviorCommentComposer() {
               const input = studentInputs[student.id] || makeInitialStudentInput();
               const statusMeta = getStatusMeta(input.status);
               const hasDraft = Boolean(input.result?.draft);
+              const qualityMeta = getDraftSimilarityStatusMeta(input.quality?.status);
+              const qualityPercentage = input.quality ? `${input.quality.percentage}%` : "-";
+              const isDuplicateQuality = input.quality?.status === "duplicate" && hasDraft;
+              const qualityChecked = isDuplicateQuality && qualitySelectedStudentIdSet.has(student.id);
+              const canRegenerate = !isGenerating && !["queued", "generating"].includes(input.status) && (hasDraft || input.status === "failed") && isStudentReady(input);
 
               return (
                 <article key={student.id} className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-[220px_minmax(0,1fr)_140px]">
@@ -954,7 +1061,13 @@ export function BulkBehaviorCommentComposer() {
                     <p className="mt-1 text-xs text-slate-500">
                       {student.grade} · {departmentLabel(student.department)}
                     </p>
-                    <span className={`mt-3 inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>{statusMeta.label}</span>
+                    <div className="mt-3 grid gap-2">
+                      <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>상태 {statusMeta.label}</span>
+                      <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${qualityMeta.className}`}>
+                        유사도 {qualityPercentage} · {qualityMeta.label}
+                      </span>
+                    </div>
+                    {input.quality?.matchedStudentName ? <p className="mt-2 text-xs font-semibold text-slate-500">가장 유사: {input.quality.matchedStudentName}</p> : null}
                   </div>
 
                   <div>
@@ -975,16 +1088,28 @@ export function BulkBehaviorCommentComposer() {
                   </div>
 
                   <div className="grid content-start gap-2">
+                    <label
+                      className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold ${
+                        isDuplicateQuality ? "border-rose-200 bg-rose-50 text-rose-800" : "border-slate-200 bg-slate-50 text-slate-500"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={qualityChecked}
+                        onChange={() => toggleQualitySelection(student.id)}
+                        disabled={!isDuplicateQuality || isGenerating}
+                      />
+                      중복 의심 선택
+                    </label>
                     <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => copyDraft(student.id)} disabled={!hasDraft}>
                       <Clipboard size={15} aria-hidden="true" />
                       복사
                     </button>
-                    {input.status === "failed" ? (
-                      <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => generateForStudents([student])} disabled={isGenerating}>
-                        <Play size={15} aria-hidden="true" />
-                        재생성
-                      </button>
-                    ) : null}
+                    <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => regenerateSingleStudent(student)} disabled={!canRegenerate}>
+                      <RefreshCcw size={15} aria-hidden="true" />
+                      재생성
+                    </button>
                   </div>
                 </article>
               );
