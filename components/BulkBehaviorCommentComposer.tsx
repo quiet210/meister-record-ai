@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clipboard, Copy, Loader2, Play, RefreshCcw, Search, Sparkles, UsersRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clipboard, Copy, Download, Loader2, Play, RefreshCcw, Search, Sparkles, UsersRound } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type ChecklistCategoryKey, type SettingsOptions } from "@/lib/admin-settings";
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
+import { downloadBehaviorCommentResults, type BehaviorCommentResultExportRow } from "@/lib/export-results";
 import { behaviorImprovementOptions, gradeOptions } from "@/lib/options";
 import { saveRecordDraft } from "@/lib/record-drafts";
 import { ensureUserProfile, listStudents } from "@/lib/students";
@@ -317,6 +318,32 @@ export function BulkBehaviorCommentComposer() {
       failed: 0
     } satisfies Record<BulkStatus, number>
   );
+  const behaviorResultExportRows = useMemo<BehaviorCommentResultExportRow[]>(
+    () =>
+      selectedStudents.flatMap((student) => {
+        const input = studentInputs[student.id] || makeInitialStudentInput();
+        if (input.status !== "completed" && input.status !== "failed") return [];
+
+        const hasCompletedDraft = input.status === "completed" && Boolean(input.result?.draft);
+        if (input.status === "completed" && !hasCompletedDraft) return [];
+
+        return [
+          {
+            grade: student.grade,
+            className: student.className,
+            number: student.number,
+            name: student.name,
+            department: departmentOptions.find((option) => option.value === student.department)?.label || student.department,
+            draft: hasCompletedDraft ? input.result?.draft || "" : "",
+            similarityPercentage: hasCompletedDraft ? input.quality?.percentage : null,
+            similarityStatus: hasCompletedDraft ? input.quality?.status : null,
+            generationStatus: input.status
+          }
+        ];
+      }),
+    [departmentOptions, selectedStudents, studentInputs]
+  );
+  const completedExportResultCount = behaviorResultExportRows.filter((row) => row.generationStatus === "completed" && row.draft.trim().length > 0).length;
 
   function departmentLabel(value: string) {
     return departmentOptions.find((option) => option.value === value)?.label || value;
@@ -721,6 +748,18 @@ export function BulkBehaviorCommentComposer() {
     patchStudentInput(studentId, { savedMessage: "클립보드에 복사했습니다." }, false);
   }
 
+  async function downloadBehaviorResults() {
+    if (completedExportResultCount === 0) return;
+
+    try {
+      await downloadBehaviorCommentResults(behaviorResultExportRows);
+      setMessage(`생성 완료 결과 ${completedExportResultCount}건을 엑셀로 다운로드했습니다.`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "엑셀 다운로드 중 오류가 발생했습니다.";
+      setMessage(errorMessage);
+    }
+  }
+
   return (
     <div className="min-w-0 space-y-5">
       <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1059,10 +1098,19 @@ export function BulkBehaviorCommentComposer() {
             <h2 className="text-lg font-bold text-slate-950">생성 결과</h2>
             <p className="mt-1 text-sm text-slate-500">학생별 생성 결과와 마지막 생성 묶음 기준 유사도를 확인합니다.</p>
           </div>
-          <button className="primary-button" type="button" onClick={regenerateQualitySelectedStudents} disabled={qualityRegenerationStudents.length === 0 || isGenerating}>
-            <RefreshCcw size={17} aria-hidden="true" />
-            선택 학생 재생성
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <p className="text-xs font-semibold text-slate-500">생성 완료된 결과만 다운로드됩니다.</p>
+            <div className="flex flex-wrap gap-2">
+              <button className="secondary-button" type="button" onClick={downloadBehaviorResults} disabled={completedExportResultCount === 0}>
+                <Download size={17} aria-hidden="true" />
+                행특 결과 엑셀 다운로드
+              </button>
+              <button className="primary-button" type="button" onClick={regenerateQualitySelectedStudents} disabled={qualityRegenerationStudents.length === 0 || isGenerating}>
+                <RefreshCcw size={17} aria-hidden="true" />
+                선택 학생 재생성
+              </button>
+            </div>
+          </div>
         </div>
 
         {duplicateQualityStudents.length > 0 ? (
