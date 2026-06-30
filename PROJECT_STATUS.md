@@ -1,12 +1,23 @@
 # Project Status
 
-최종 업데이트: 2026-06-29
+최종 업데이트: 2026-06-30
 
 ## 현재 상태 요약
 
 공업계 마이스터고 학생부 작성 지원 플랫폼은 Next.js 15 App Router, TypeScript, TailwindCSS, Supabase Auth/DB, Gemini API, Vercel 기반으로 동작한다.
 
-현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 과세특 일괄 생성, 행동특성 및 종합의견 생성, 행동특성 및 종합의견 일괄 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영과 학생별 분산 선택, 일괄 생성 결과 품질 관리 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다. 데스크톱 레이아웃은 `AppShell` 중심의 넓은 앱 컨테이너와 `min-w-0`/내부 테이블 스크롤 구조로 정리되어 페이지 전체 가로 스크롤이 발생하지 않도록 조정했다.
+현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 과세특 일괄 생성, 행동특성 및 종합의견 생성, 행동특성 및 종합의견 일괄 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영과 학생별 분산 선택, 일괄 생성 결과 품질 관리 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다. 데스크톱 레이아웃은 `AppShell` 중심의 넓은 앱 컨테이너와 `min-w-0`/내부 테이블 스크롤 구조로 정리되어 페이지 전체 가로 스크롤이 발생하지 않도록 조정했다. 행동특성 일괄 생성 payload는 화면 state와 API payload의 매핑을 점검해 `schoolLifeAreas`와 `industrialAttitudes`를 분리 전달하도록 수정했다.
+
+## 현재 프로젝트 진행률
+
+현재 진행률은 약 92%이다.
+
+- 핵심 작성 흐름: 과세특/행동특성 단일 생성과 일괄 생성 완료
+- 데이터 관리: 학생 CRUD, 엑셀 업로드/양식 다운로드, 관리자 설정, 과목/성취기준, 체크리스트 관리 완료
+- 저장 흐름: 생성 결과 `record_drafts` insert 저장과 품질 재생성 update 저장 완료
+- 품질 관리: 생성 결과 유사도 분석, 70~84% 유사 표시, 85% 이상 중복 의심 표시, 선택 학생 재생성 완료
+- 레이아웃 안정화: 앱 전체 가로 스크롤 제거, 일괄 입력 테이블 내부 스크롤 구조 적용 완료
+- 남은 주요 작업: 생성 결과 엑셀 다운로드, 생성 결과 편집 기능, 생성 이력 관리, RAG 고도화
 
 ## 현재 완료 기능
 
@@ -41,13 +52,14 @@
 - `/bulk-behavior-comment` 행동특성 및 종합의견 일괄 생성 화면 추가 완료
 - 행동특성 일괄 생성 학생별 입력/상태/결과/복사/실패 재시도 구현 완료
 - 행동특성 일괄 생성 동시 API 호출 수 3개 제한 및 `record_drafts.mode = behavior` 자동 저장 완료
+- 행동특성 일괄 생성 payload 매핑 버그 수정 완료: 학교생활 영역은 `schoolLifeAreas`, 생활태도 키워드/협업·관계/책임감·성실성은 `industrialAttitudes`로 전달
 - 과세특/행동특성 일괄 생성 결과 중복도 자동 분석 완료
 - 생성 결과 영역에 학생명, 유사도, 복사, 재생성, 상태 표시 완료
 - 유사도 기준별 정상/유사/중복 의심 표시 완료
 - 중복 의심 학생만 체크박스로 선택해 기존 생성 API를 재호출하는 선택 재생성 완료
 - 재생성 시 `record_drafts` 최신 row 업데이트 저장 경로 완료
 - 데스크톱 레이아웃 가로 스크롤 문제 개선 완료
-- `AppShell`, `Dashboard`, `RecordComposer`, `BulkSubjectCommentComposer`, `BulkBehaviorCommentComposer`, `StudentManager`, 공통 레이아웃 폭/스크롤 구조 점검 완료
+- `AppShell`, `Dashboard`, `RecordComposer`, `DesktopRecordComposer`, `BulkSubjectCommentComposer`, `BulkBehaviorCommentComposer`, `StudentManager`, `CurriculumManager` 공통 레이아웃 폭/스크롤 구조 점검 완료
 - 학생별 입력 테이블은 필요한 경우 내부 컨테이너에서만 가로 스크롤되도록 조정 완료
 - `/dashboard`, `/bulk-subject-comment`, `/bulk-behavior-comment` Tailwind 스타일 및 페이지 overflow 정상 확인 완료
 - Vercel TypeScript 빌드 오류 대응 완료
@@ -101,6 +113,7 @@
   - 학년/반/학과 필터, 필터 결과 전체 선택, 학생별 입력 테이블 내 개별 선택 구현
   - 과목명, 단원명, 분량, 문체를 공통 입력값으로 관리
   - 공통 설정을 최상단에 배치하고, 학생별 입력 테이블을 화면 핵심 영역으로 구성
+  - 학생별 입력 테이블은 페이지 전체가 아니라 테이블 컨테이너 내부에서만 가로 스크롤되도록 구성
   - 학생별 입력 테이블 컬럼은 선택 체크박스, 학생명, 활동유형, 역량키워드, 보완점, 교사 관찰 메모, 상태, 작업으로 구성
   - 활동유형, 역량 키워드, 보완점 칩 선택과 교사 관찰 메모 입력을 각 학생 행 안에서 직접 수행
   - 활동유형, 역량 키워드, 보완점은 `loadSettingsOptions()`의 관리자 체크리스트 설정값을 사용하고 DB 값이 없으면 기존 옵션으로 fallback
@@ -113,6 +126,7 @@
   - 생성 결과는 입력 테이블 컬럼에 넣지 않고 테이블 아래 별도 생성 결과 영역에 학생별 표시
   - 생성 결과 복사와 실패 학생 재생성 가능
   - 생성 성공 시 `saveRecordDraft()`로 `record_drafts`에 자동 저장
+  - 품질 재생성 시 같은 교사/학생/mode 최신 `record_drafts` row를 update
   - 실패한 학생만 다시 생성 가능
 - 행동특성 일괄 생성:
   - `/bulk-behavior-comment` 라우트 추가
@@ -121,12 +135,15 @@
   - 공통 설정 아래에 학생별 입력 테이블을 핵심 영역으로 구성
   - 학생별 입력 테이블 컬럼은 선택, 학생명, 학교생활 영역, 생활태도 키워드, 협업/관계, 책임감/성실성, 보완점, 담임 관찰 메모, 상태, 작업으로 구성
   - 각 학생 행 안에서 키워드 선택과 담임 관찰 메모 입력을 직접 수행
-  - 학생별 payload에 학생 이름, 학년, 반, 학과, 생활 영역/키워드/보완점/담임 메모, 분량, 문체, 작성 관점을 포함해 기존 `/api/generate/behavior-comment` API 재사용
+  - 학생별 payload에 학생 이름, 학년, 반, 학과, 학교생활 영역, 공업계 특화 생활태도, 보완점, 담임 메모, 분량, 문체, 작성 관점을 포함해 기존 `/api/generate/behavior-comment` API 재사용
+  - payload 매핑은 `schoolLifeAreas`에 학교생활 영역만 넣고, 생활태도 키워드/협업·관계/책임감·성실성 선택값은 `industrialAttitudes`로 합쳐 전달
+  - 기존에는 UI 키워드 state가 `schoolLifeAreas`에 합쳐지고 `industrialAttitudes`가 빈 배열로 전달되어 서버 검증에서 공업계 특화 생활태도가 비어 있다고 판단할 수 있었으며, 이 매핑 오류를 수정 완료
   - 브라우저 측 worker 방식으로 동시 생성 수를 3개로 제한
   - 학생별 상태를 대기, 생성 중, 완료, 실패로 표시
   - 생성 결과는 입력 테이블 아래 별도 영역에 학생별 표시
   - 생성 결과 복사와 실패 학생 재생성 가능
   - 생성 성공 시 `saveRecordDraft()`로 `record_drafts`에 `mode=behavior` 저장
+  - 품질 재생성 시 같은 교사/학생/mode 최신 `record_drafts` row를 update
   - 실패한 학생만 다시 생성 가능
 - 생성 품질 관리:
   - 과세특/행동특성 일괄 생성 완료 후 이번 생성에서 성공한 학생 초안만 비교
@@ -146,6 +163,8 @@
 - `DesktopRecordComposer`는 결과 패널을 고정 430px 대신 `minmax(320px,400px)`/`2xl:420px` 구조로 조정해 데스크톱 폭을 더 자연스럽게 사용한다.
 - `/bulk-subject-comment` 학생별 입력 테이블은 `w-full min-w-[1180px]`와 내부 `overflow-x-auto` 컨테이너를 사용한다.
 - `/bulk-behavior-comment` 학생별 입력 테이블은 컬럼 수가 많으므로 `w-full min-w-[1440px]`와 내부 `overflow-x-auto` 컨테이너를 사용한다.
+- `StudentManager`와 `CurriculumManager`는 반응형 grid와 `min-w-0` 보강으로 좁은 화면에서 전체 페이지 폭을 밀지 않도록 조정했다.
+- 페이지 전체 가로 스크롤은 제거하고, 넓은 데이터 입력/관리 테이블은 각 테이블 컨테이너 내부에서만 스크롤되도록 변경했다.
 - 1440px 기준 `/dashboard`, `/bulk-subject-comment`, `/bulk-behavior-comment`에서 페이지 전체 가로 overflow가 없고 Tailwind 패널/버튼 스타일이 정상 적용됨을 확인했다.
 - `npm run build`를 실행하는 동안 기존 `next dev` 서버가 같은 `.next` 산출물을 사용 중이면 개발 서버의 CSS/청크가 깨질 수 있다. 빌드 검증 후 개발 화면이 기본 HTML처럼 보이면 dev 서버를 종료하고 다시 실행한다.
 
@@ -456,6 +475,11 @@ supabase/migrations/20260629_record_draft_quality_updates.sql
   - 기존 과세특/행동특성 생성 API는 수정하지 않고, 일괄 생성 화면의 성공 결과 후처리로 유사도를 분석한다.
   - 이번 생성 묶음에서 성공한 초안만 비교해 기존 저장 데이터나 다른 학생 CRUD 흐름에 영향을 주지 않는다.
   - 중복 의심 학생 선택 재생성은 같은 API를 다시 호출하고, 저장 단계에서만 `record_drafts` 최신 row를 갱신한다.
+- 행동특성 일괄 생성 payload 매핑 오류 수정
+  - 화면의 학교생활 영역, 생활태도 키워드, 협업/관계, 책임감/성실성, 보완점, 담임 관찰 메모 state를 점검했다.
+  - `schoolLifeAreas`에는 학교생활 영역만 전달하고, 생활태도 키워드/협업·관계/책임감·성실성은 `industrialAttitudes`로 합쳐 전달하도록 수정했다.
+  - 기존 API는 수정하지 않고 클라이언트 payload 생성 로직만 수정했다.
+  - 개발 환경에서 UI state, API payload, API result 흐름을 console로 확인할 수 있게 했다.
 
 ## 주요 파일
 
@@ -547,13 +571,14 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 ## 다음 개발 우선순위
 
-1. 현재 성취기준 관련도 계산을 벡터 검색/RAG와 통합해 검색 품질 개선
-2. 결과 엑셀 다운로드
-3. RAG 기반 생성 품질 개선
+1. 과세특/행동특성 생성 결과 엑셀 다운로드
+2. 생성 결과 편집 기능
+3. 생성 이력 관리
+4. RAG 고도화: 학습목표, NCS, 루브릭, 교과서 활용
 
 ### 다음 단계 설계 방향
 
-다음 1순위는 업로드된 `curriculum_standards`의 현재 관련도 기반 선택 흐름을 벡터 검색/RAG와 통합해 검색 품질을 높이는 작업이다.
+다음 1순위는 과세특/행동특성 일괄 생성 결과를 엑셀로 다운로드하는 기능이다. 이후 생성된 초안을 화면에서 편집하고, 생성 이력을 조회/관리한 뒤, 업로드 자료와 성취기준을 활용하는 RAG 고도화로 확장한다.
 
 ```text
 과목 선택
@@ -573,8 +598,8 @@ Gemini 프롬프트 주입
 - 생성 API는 선택 과목명과 `school_id`를 기준으로 `curriculum_standards.status = active` 성취기준 전체 후보를 조회한다.
 - 검색된 단원명, 성취기준, 핵심키워드는 관련도 기반 + seed 랜덤 분산 선택 후 최대 3개까지 Gemini 프롬프트 컨텍스트로 주입한다.
 - `getCurriculumStandardsBySubject()`는 선택적 `limit` 옵션을 지원하지만, 현재 과세특 생성 기본 경로는 전체 후보를 가져와 별도 선택 로직에서 최대 3개를 고른다.
-- 다음 단계에서는 현재 규칙 기반 관련도 점수를 벡터 검색/RAG와 통합한다.
-- 과세특/행동특성 일괄 생성은 완료됐으며, 다음 확장 후보는 생성 결과 엑셀 다운로드이다.
+- RAG 고도화 단계에서는 현재 규칙 기반 관련도 점수를 벡터 검색/RAG와 통합한다.
+- 과세특/행동특성 일괄 생성과 품질 관리는 완료됐으며, 다음 확장 후보는 생성 결과 엑셀 다운로드이다.
 
 ## 중요한 설계 결정
 
@@ -594,6 +619,7 @@ Gemini 프롬프트 주입
 - `/bulk-subject-comment`의 화면 우선순위는 공통 설정, 학생별 입력 테이블, 생성 버튼, 생성 결과, 일괄 적용 보조 기능 순서로 유지한다.
 - 행동특성 일괄 생성은 기존 단일 행동특성 생성 API를 학생별로 재사용하며, 클라이언트에서 동시 실행 수를 3개로 제한한다.
 - 행동특성 일괄 생성 성공 결과는 `record_drafts`에 `mode=behavior`로 자동 저장한다.
+- 행동특성 일괄 생성 payload는 `schoolLifeAreas`와 `industrialAttitudes`를 분리한다. 학교생활 영역은 `schoolLifeAreas`, 생활태도 키워드/협업·관계/책임감·성실성은 `industrialAttitudes`로 전달한다.
 - 생성 품질 관리는 기존 생성 API, 학생 CRUD, 관리자 기능, 성취기준 조회 로직을 수정하지 않고 일괄 생성 UI 후처리와 저장 함수 옵션으로만 연결한다.
 - 중복도 분석 대상은 이번 생성에서 성공한 학생 초안으로 제한한다.
 - 중복 의심 선택 재생성은 기존 payload를 사용해 같은 생성 API를 재호출하고, 재생성 결과만 `record_drafts` 최신 row update 저장을 사용한다.
