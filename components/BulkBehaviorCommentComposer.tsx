@@ -115,10 +115,10 @@ function getGroupOptions(settingsOptions: SettingsOptions, key: ChecklistCategor
 
 function getStudentWarnings(input: StudentBehaviorInput) {
   const warnings: string[] = [];
-  const hasKeyword = input.lifeAttitudeKeywords.length > 0 || input.relationshipKeywords.length > 0 || input.responsibilityKeywords.length > 0;
+  const industrialAttitudes = getSelectedIndustrialAttitudes(input);
 
   if (input.schoolLifeAreas.length === 0) warnings.push("학교생활 영역");
-  if (!hasKeyword) warnings.push("생활태도/협업/책임감 키워드");
+  if (industrialAttitudes.length === 0) warnings.push("생활태도/협업/책임감 키워드");
   if (input.behaviorImprovements.length === 0) warnings.push("보완점");
   if (input.homeroomMemo.trim().length < 10) warnings.push("담임 메모 10자 이상");
 
@@ -126,8 +126,11 @@ function getStudentWarnings(input: StudentBehaviorInput) {
 }
 
 function isStudentReady(input: StudentBehaviorInput) {
-  const hasKeyword = input.lifeAttitudeKeywords.length > 0 || input.relationshipKeywords.length > 0 || input.responsibilityKeywords.length > 0;
-  return input.schoolLifeAreas.length > 0 && hasKeyword && input.homeroomMemo.trim().length >= 10;
+  return input.schoolLifeAreas.length > 0 && getSelectedIndustrialAttitudes(input).length > 0 && input.homeroomMemo.trim().length >= 10;
+}
+
+function getSelectedIndustrialAttitudes(input: StudentBehaviorInput) {
+  return mergeUnique([...input.lifeAttitudeKeywords, ...input.relationshipKeywords, ...input.responsibilityKeywords]);
 }
 
 async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
@@ -507,19 +510,16 @@ export function BulkBehaviorCommentComposer() {
   }
 
   function buildPayload(student: Student, input: StudentBehaviorInput): BehaviorRecordFormPayload {
+    const industrialAttitudes = getSelectedIndustrialAttitudes(input);
+
     return {
       mode: "behavior",
       studentName: student.name,
       grade: student.grade,
       department: student.department,
       className: student.className,
-      schoolLifeAreas: mergeUnique([
-        ...input.schoolLifeAreas,
-        ...input.lifeAttitudeKeywords,
-        ...input.relationshipKeywords,
-        ...input.responsibilityKeywords
-      ]),
-      industrialAttitudes: [],
+      schoolLifeAreas: input.schoolLifeAreas,
+      industrialAttitudes,
       behaviorImprovements: input.behaviorImprovements,
       homeroomMemo: input.homeroomMemo,
       lengthOption,
@@ -566,6 +566,30 @@ export function BulkBehaviorCommentComposer() {
       const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
       const payload = buildPayload(student, input);
 
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[bulk-behavior-comment] UI state", {
+          studentId: student.id,
+          studentName: student.name,
+          schoolLifeAreas: input.schoolLifeAreas,
+          lifeAttitudeKeywords: input.lifeAttitudeKeywords,
+          relationshipKeywords: input.relationshipKeywords,
+          responsibilityKeywords: input.responsibilityKeywords,
+          behaviorImprovements: input.behaviorImprovements,
+          homeroomMemoLength: input.homeroomMemo.trim().length
+        });
+        console.log("[bulk-behavior-comment] API payload", {
+          studentId: student.id,
+          studentName: student.name,
+          schoolLifeAreas: payload.schoolLifeAreas,
+          industrialAttitudes: payload.industrialAttitudes,
+          behaviorImprovements: payload.behaviorImprovements,
+          homeroomMemoLength: payload.homeroomMemo.trim().length,
+          lengthOption: payload.lengthOption,
+          writingStyle: payload.writingStyle,
+          writingPerspective: payload.writingPerspective
+        });
+      }
+
       patchStudentInput(student.id, { status: "generating", error: "", savedMessage: "" }, false);
 
       try {
@@ -585,6 +609,15 @@ export function BulkBehaviorCommentComposer() {
         const result = (await response.json()) as GenerateResponse;
         if (!result.draft) {
           throw new Error(result.warnings?.join(" ") || "초안을 생성하지 못했습니다.");
+        }
+
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[bulk-behavior-comment] API result", {
+            studentId: student.id,
+            studentName: student.name,
+            warnings: result.warnings,
+            draftLength: result.draft.length
+          });
         }
 
         const saveResult = await saveRecordDraft({
