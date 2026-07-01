@@ -1,28 +1,42 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpenCheck, BookOpenText, ClipboardList, Database, FileText, Home, ListChecks, PenLine, Settings, UsersRound } from "lucide-react";
+import { BookOpenCheck, BookOpenText, ClipboardList, FileText, PenLine, Settings, UsersRound, type LucideIcon } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ensureUserProfile } from "@/lib/students";
 
-const navItems = [
-  { href: "/dashboard", label: "대시보드", icon: Home },
-  { href: "/subject-comment", label: "세특 작성", icon: PenLine },
-  { href: "/bulk-subject-comment", label: "일괄 세특", icon: ListChecks },
-  { href: "/behavior-comment", label: "행동특성", icon: ClipboardList },
-  { href: "/bulk-behavior-comment", label: "일괄 행특", icon: ClipboardList },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  activeHrefs?: string[];
+};
+
+const navItems: NavItem[] = [
+  { href: "/subject-comment", label: "과세특", icon: PenLine, activeHrefs: ["/bulk-subject-comment"] },
+  { href: "/behavior-comment", label: "행동특성", icon: ClipboardList, activeHrefs: ["/bulk-behavior-comment"] },
+  { href: "/students", label: "학생 관리", icon: UsersRound },
   { href: "/student-records", label: "학생부 관리", icon: FileText },
-  { href: "/knowledge", label: "문서", icon: Database },
   { href: "/admin/curriculum", label: "과목/성취기준", icon: BookOpenText },
-  { href: "/students", label: "학생 관리", icon: UsersRound }
 ];
 
-const adminNavItem = { href: "/admin", label: "관리", icon: Settings };
+const adminNavItem: NavItem = {
+  href: "/admin",
+  label: "관리자",
+  icon: Settings,
+  activeHrefs: ["/admin/departments", "/admin/subjects", "/admin/checklists"]
+};
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
+  const pathname = usePathname();
   const visibleNavItems = isAdmin ? [...navItems, adminNavItem] : navItems;
+
+  function isActiveNavItem(item: NavItem) {
+    return [item.href, ...(item.activeHrefs || [])].includes(pathname);
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -56,11 +70,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <nav className="sticky top-20 space-y-1">
             {visibleNavItems.map((item) => {
               const Icon = item.icon;
+              const isActive = isActiveNavItem(item);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex h-11 items-center gap-3 rounded-md px-3 text-sm font-semibold text-slate-600 hover:bg-white hover:text-blue-700"
+                  className={`flex h-11 items-center gap-3 rounded-md px-3 text-sm font-semibold transition ${
+                    isActive ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:bg-white hover:text-blue-700"
+                  }`}
                 >
                   <Icon size={18} aria-hidden="true" />
                   {item.label}
@@ -78,8 +95,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         {visibleNavItems.map((item) => {
           const Icon = item.icon;
+          const isActive = isActiveNavItem(item);
           return (
-            <Link key={item.href} href={item.href} className="flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-slate-600">
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold transition ${
+                isActive ? "text-blue-700" : "text-slate-600"
+              }`}
+            >
               <Icon size={20} aria-hidden="true" />
               {item.label}
             </Link>

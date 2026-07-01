@@ -90,9 +90,9 @@ export type RecordComposerViewProps = {
 function modeConfig(mode: CommentMode): RecordComposerConfig {
   if (mode === "subject") {
     return {
-      title: "세특 작성",
-      description: "업로드된 교과/교육과정/NCS/루브릭 문서를 검색하고, 실제 관찰 내용을 바탕으로 세부능력 및 특기사항 초안을 생성합니다.",
-      buttonLabel: "세특 생성",
+      title: "과세특 작성",
+      description: "과목, 단원, 활동 내용, 교사 관찰 메모를 바탕으로 교과 세부능력 및 특기사항 초안을 생성합니다.",
+      buttonLabel: "과세특 생성",
       endpoint: "/api/generate/subject-comment"
     };
   }
