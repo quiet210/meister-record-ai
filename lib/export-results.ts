@@ -83,7 +83,7 @@ async function downloadWorkbook(fileName: string, sheetName: string, rows: strin
 
 export async function downloadSubjectCommentResults(rows: SubjectCommentResultExportRow[]) {
   const sheetRows = [
-    ["학년", "반", "번호", "이름", "학과", "과목명", "단원명", "생성 결과", "유사도", "유사도 상태", "생성 상태"],
+    ["학년", "반", "번호", "이름", "학과", "과목명", "단원명", "최종 출력 내용", "유사도", "유사도 상태", "생성 상태"],
     ...rows.map((row) => [
       row.grade,
       row.className,
@@ -104,7 +104,7 @@ export async function downloadSubjectCommentResults(rows: SubjectCommentResultEx
 
 export async function downloadBehaviorCommentResults(rows: BehaviorCommentResultExportRow[]) {
   const sheetRows = [
-    ["학년", "반", "번호", "이름", "학과", "생성 결과", "유사도", "유사도 상태", "생성 상태"],
+    ["학년", "반", "번호", "이름", "학과", "최종 출력 내용", "유사도", "유사도 상태", "생성 상태"],
     ...rows.map((row) => [
       row.grade,
       row.className,

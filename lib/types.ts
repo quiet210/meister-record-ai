@@ -11,6 +11,8 @@ export type Student = {
 
 export type CommentMode = "subject" | "behavior";
 
+export type RecordDraftLifecycleStatus = "ai_generated" | "editing" | "saved" | "finalized";
+
 export type KnowledgeDocumentType = "learning_goal" | "curriculum" | "ncs_unit" | "rubric";
 
 export type CommentLength = "short" | "medium" | "long";
