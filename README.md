@@ -1,6 +1,6 @@
 # 공업계 마이스터고 학생부 작성 지원 플랫폼
 
-공업계 마이스터고 교사가 학생부 초안을 더 빠르고 일관되게 작성할 수 있도록 돕는 웹 플랫폼입니다. 학생 정보와 학교별 설정값을 Supabase에 저장하고, Gemini API를 통해 과세특과 행동특성 및 종합의견 초안을 생성합니다.
+공업계 마이스터고 교사가 학생부 초안을 더 빠르고 일관되게 작성할 수 있도록 돕는 웹 플랫폼입니다. 학생 정보와 학교별 설정값을 Supabase에 저장하고, Gemini API를 통해 과세특과 행동특성 및 종합의견 초안을 생성한 뒤 교사 수정본과 최종본까지 관리합니다.
 
 ## 프로젝트 개요
 
@@ -33,6 +33,7 @@
 - 행동특성 일괄 생성
 - 행동특성 일괄 생성 결과 엑셀 다운로드
 - 행동특성 생성 결과 편집, AI 원본 비교, 최종본 확정
+- 학생별 학생부 관리
 - AI 생성 결과 중복도 분석
 - 중복 의심 학생 선택 재생성
 - 관리자 기능
@@ -86,10 +87,20 @@
 - 행특 일괄 생성 결과 엑셀 다운로드 완료
 - 과세특/행동특성 단일 생성 결과 편집기 추가 완료
 - 과세특/행동특성 일괄 생성 결과 학생별 편집기 추가 완료
-- 학생부 lifecycle 구현 완료: AI 원본, 교사 수정본, 최종본
-- 교사 수정본 3초 자동 저장 및 명시적 저장 완료
-- 최종 확정/해제, AI 원본 비교, AI 다시 생성 후보 선택 UI 완료
+- `record_drafts` lifecycle 적용 완료: AI 원본, 교사 수정본, 최종본
+- `record_drafts` 확장 구조 적용 완료: `ai_content`, `edited_content`, `final_content`, `status`, `edited_at`, `finalized_at`, `edited_by`
+- 교사 수정본 3초 자동 저장 및 명시적 수정 저장 완료
+- `AI 원본 보기`로 AI 원본과 현재 수정본 비교 완료
+- `최종 확정` / `최종 해제` 흐름 완료
 - 복사와 엑셀 다운로드의 최종본 선택 규칙 적용 완료
+- 학생별 학생부 관리 화면 `/student-records` 추가 완료
+- `/student-records`에서 좌측 학생 목록 검색, 학년/학과/반 필터, 우측 과세특/행특 카드형 상세 표시 완료
+- 과세특/행특 카드별 현재 상태, AI 생성 여부, 수정본 여부, 최종본 여부, 생성일, 최종 수정일 표시 완료
+- 학생부 카드별 AI 원본/수정본/최종본 탭 전환과 생성 이력 Timeline 표시 완료
+- 학생부 카드별 복사, AI 다시 생성, 최종 확정, 최종 해제 액션 연결 완료
+- 학생부 관리 화면의 복사는 `final_content` → `edited_content` → `ai_content` → `draft_text` 순서의 최종본 선택 규칙을 사용
+- Supabase migration `20260630_record_draft_lifecycle.sql` 적용 완료
+- Vercel Production 배포 완료
 - 데스크톱 레이아웃 가로 스크롤 문제 개선 완료
 - `AppShell`과 주요 콘텐츠 영역을 일반 웹 애플리케이션 형태의 반응형 레이아웃으로 정리 완료
 - `DesktopRecordComposer` 결과 패널과 입력 영역의 데스크톱 반응형 폭 개선 완료
@@ -102,20 +113,22 @@
 
 ## 현재 프로젝트 진행률
 
-현재 진행률은 약 96%입니다.
+현재 진행률은 약 97%입니다.
 
 - 핵심 작성 흐름: 과세특/행동특성 단일 생성과 일괄 생성 완료
 - 데이터 관리: 학생 CRUD, 관리자 설정, 과목/성취기준, 체크리스트 관리 완료
 - 저장 흐름: 생성 결과 `record_drafts` 저장, 교사 수정본 저장, 최종본 확정 완료
+- 학생별 관리: `/student-records`에서 학생별 과세특/행특 AI 원본, 수정본, 최종본, 생성 이력 조회 완료
 - 품질 관리: 생성 결과 유사도 분석, 유사/중복 의심 표시, 선택 재생성 완료
-- 내보내기: 과세특/행특 일괄 생성 결과 엑셀 다운로드 완료, 최종본 선택 규칙 적용 완료
-- 남은 주요 작업: 생성 이력 관리, RAG 고도화
+- 내보내기: 과세특/행특 일괄 생성 결과 엑셀 다운로드 완료, `final_content → edited_content → ai_content → draft_text` 선택 규칙 적용 완료
+- 남은 주요 작업: 생성 이력 전용 관리, 나이스 붙여넣기용 엑셀 다운로드 고도화, RAG 고도화
 
 ## 주요 화면
 
 - `/login`: Supabase Auth 로그인/회원가입
 - `/dashboard`: 주요 작업 진입 대시보드
 - `/students`: 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드
+- `/student-records`: 학생별 과세특/행특 AI 원본, 수정본, 최종본, 생성 이력 관리
 - `/subject-comment`: 과세특 생성
 - `/bulk-subject-comment`: 과세특 일괄 생성
 - `/behavior-comment`: 행동특성 및 종합의견 생성
@@ -212,7 +225,7 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 - `public.users`: Supabase Auth 사용자와 연결되는 앱 사용자 프로필입니다. `role`은 `admin` 또는 `teacher`입니다.
 - `public.students`: 학교별 학생 정보입니다.
-- `public.record_drafts`: 과세특/행동특성 AI 원본, 교사 수정본, 최종본과 lifecycle 상태를 저장합니다. 기존 `draft_text`는 호환용으로 유지합니다.
+- `public.record_drafts`: 과세특/행동특성 AI 원본, 교사 수정본, 최종본과 lifecycle 상태를 저장합니다. `ai_content`, `edited_content`, `final_content`를 사용하고 기존 `draft_text`는 호환용 fallback으로 유지합니다.
 - `public.departments`: 학교별 학과 설정입니다.
 - `public.subjects`: deprecated된 기존 과목 설정 테이블입니다. 즉시 삭제하지 않고 데이터 보존과 이전 호환용으로만 유지합니다.
 - `public.curriculum_subjects`: 단일 과목 마스터 테이블입니다. 과목명, 교과유형, 설명, 정렬순서를 저장합니다.
@@ -253,10 +266,13 @@ Gemini 생성 프롬프트 반영
 - `중복 의심` 학생만 결과 영역의 체크박스로 선택 가능하며, `선택 학생 재생성`은 기존 과세특/행동특성 생성 API를 다시 호출해 새 AI 결과 후보를 표시
 - 선택 재생성은 기존 성취기준 조회, 관련도 기반 선택, 학생 seed 기반 분산 로직을 변경하지 않고 기존 payload로 재호출
 - AI 다시 생성 결과는 기존 교사 수정본을 덮어쓰지 않고 `현재 유지` 또는 `새 결과 사용` 선택 후에만 교사 수정본으로 저장
-- 복사와 엑셀 다운로드는 `final_content`, `edited_content`, `ai_content` 순서로 출력 내용을 선택
+- 복사와 엑셀 다운로드는 `final_content` → `edited_content` → `ai_content` → `draft_text` 순서로 출력 내용을 선택
+- 학생별 학생부 관리 화면 `/student-records`는 `students`와 `record_drafts`를 함께 조회해 좌측에는 학생 검색/필터 목록, 우측에는 선택 학생의 과세특/행특 카드와 Timeline을 표시
+- `/student-records`는 `record_drafts.student_id + mode(subject/behavior)` 기준으로 최신 row를 카드에 표시하고, 같은 학생/mode의 전체 row를 생성 이력 Timeline으로 구성
+- `/student-records`의 복사, 최종 확정, 최종 해제는 기존 lifecycle 저장 함수와 `final_content` 우선 선택 규칙을 그대로 사용
 - 성취기준 후보가 3개 이하이면 전부 사용하고, 후보가 없거나 조회를 건너뛰면 기존 과세특 생성 흐름으로 계속 동작
 
-적용할 주요 마이그레이션:
+적용 완료된 주요 마이그레이션:
 
 ```bash
 supabase/migrations/20260622_auth_students.sql
@@ -266,6 +282,8 @@ supabase/migrations/20260625_unify_subject_master.sql
 supabase/migrations/20260629_record_draft_quality_updates.sql
 supabase/migrations/20260630_record_draft_lifecycle.sql
 ```
+
+`20260630_record_draft_lifecycle.sql`은 `record_drafts`에 `ai_content`, `edited_content`, `final_content`, `status`, `edited_at`, `finalized_at`, `edited_by`를 추가하고 기존 `draft_text`를 AI 원본/수정본으로 backfill합니다.
 
 권한 구조:
 
@@ -282,6 +300,11 @@ where email = 'admin@school.kr';
 ```
 
 ## 다음 작업 후보
+
+1. 생성 이력 관리 화면
+2. 나이스 붙여넣기용 엑셀 다운로드 고도화
+3. RAG 고도화
+4. 관리자 통계 대시보드
 
 ### 중요한 설계 결정
 
@@ -308,6 +331,9 @@ where email = 'admin@school.kr';
 - 생성 품질 관리는 기존 생성 API, 학생 CRUD, 관리자 기능, 성취기준 조회 로직을 수정하지 않고 일괄 생성 결과 후처리와 저장 옵션으로만 연결합니다.
 - 중복도 분석 대상은 이번 생성에서 성공한 학생 초안으로 제한합니다.
 - 중복 의심 선택 재생성은 기존 payload로 같은 생성 API를 재호출하고, 새 AI 결과 후보를 표시한 뒤 교사가 `새 결과 사용`을 선택할 때만 `edited_content`에 저장합니다.
+- 학생별 학생부 관리 화면은 기존 생성 API, 학생 CRUD, 관리자 기능, 성취기준 조회, 일괄 생성, 중복도 분석, 엑셀 다운로드 로직을 수정하지 않고 별도 조회/관리 페이지로 추가합니다.
+- `/student-records`는 학생 목록을 `students` 기준으로 조회하고, 학생부 기록은 `record_drafts.student_id + mode` 기준으로 묶어서 표시합니다.
+- 학생부 관리 화면의 Timeline은 `created_at`을 AI 생성, `edited_at`을 수정 저장, `finalized_at`을 최종 확정 이벤트로 변환해 시간순으로 표시합니다.
 - 과세특 일괄 생성 결과 엑셀 다운로드 완료: 파일명은 `subject-comments-results.xlsx`, 시트명은 `과세특결과`입니다.
 - 행특 일괄 생성 결과 엑셀 다운로드 완료: 파일명은 `behavior-comments-results.xlsx`, 시트명은 `행특결과`입니다.
 - 데스크톱 레이아웃은 `AppShell`의 넓은 앱 컨테이너, `main min-w-0`, 반응형 grid/flex, 내부 테이블 스크롤을 기준으로 유지합니다.
@@ -315,10 +341,12 @@ where email = 'admin@school.kr';
 
 ### 다음 작업 예정
 
-현재 다음 작업 우선순위는 다음 순서입니다.
+현재 다음 작업 후보는 다음 순서입니다.
 
-1. 생성 이력 관리
-2. RAG 고도화: 학습목표, NCS, 루브릭, 교과서 활용
+1. 생성 이력 관리 화면
+2. 나이스 붙여넣기용 엑셀 다운로드 고도화
+3. RAG 고도화
+4. 관리자 통계 대시보드
 
 RAG 고도화 단계에서는 성취기준 프롬프트 반영 흐름을 향후 검색 기반으로 확장할 수 있습니다.
 
@@ -339,7 +367,7 @@ Gemini 프롬프트 주입
 ```
 
 - 성취기준 업로드 기능, 과세특 생성 프롬프트 반영, 학생별 분산 선택은 완료됐습니다.
-- 과세특/행동특성 일괄 생성, 품질 관리, 결과 엑셀 다운로드는 완료됐습니다.
+- 과세특/행동특성 일괄 생성, 품질 관리, 결과 엑셀 다운로드, 학생별 학생부 관리 화면은 완료됐습니다.
 
 ## 개발 시 주의사항
 
