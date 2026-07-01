@@ -227,8 +227,23 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
             result={props.result}
             canGenerate={props.canGenerate}
             savedMessage={props.savedMessage}
+            aiContent={props.aiContent}
+            editedContent={props.editedContent}
+            finalContent={props.finalContent}
+            lifecycleStatus={props.lifecycleStatus}
+            showCompare={props.showCompare}
+            pendingRegeneration={props.pendingRegeneration}
+            isSavingDraft={props.isSavingDraft}
+            isRegenerating={props.isRegenerating}
+            onEditedContentChange={props.setEditedContent}
             onCopy={props.copyDraft}
             onSave={props.saveDraft}
+            onToggleCompare={props.toggleCompare}
+            onRegenerate={props.regenerateDraft}
+            onKeepCurrentDraft={props.keepCurrentDraft}
+            onUseRegeneratedDraft={props.useRegeneratedDraft}
+            onFinalize={props.finalizeDraft}
+            onUnfinalize={props.unfinalizeDraft}
           />
         </aside>
       </div>

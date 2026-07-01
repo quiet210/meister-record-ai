@@ -6,9 +6,17 @@ import { getFallbackSettingsOptions, loadSettingsOptions, type ChecklistCategory
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
 import { downloadBehaviorCommentResults, type BehaviorCommentResultExportRow } from "@/lib/export-results";
 import { behaviorImprovementOptions, gradeOptions } from "@/lib/options";
-import { saveRecordDraft } from "@/lib/record-drafts";
+import {
+  finalizeRecordDraft,
+  getEffectiveRecordContent,
+  getRecordDraftLifecycleStatusMeta,
+  saveEditedRecordDraft,
+  saveRecordDraft,
+  unfinalizeRecordDraft
+} from "@/lib/record-drafts";
 import { ensureUserProfile, listStudents } from "@/lib/students";
-import type { BehaviorRecordFormPayload, CommentLength, GenerateResponse, Student } from "@/lib/types";
+import type { BehaviorRecordFormPayload, CommentLength, GenerateResponse, RecordDraftLifecycleStatus, Student } from "@/lib/types";
+import { BulkDraftLifecycleEditor } from "@/components/BulkDraftLifecycleEditor";
 
 type BulkStatus = "waiting" | "queued" | "generating" | "completed" | "failed";
 
@@ -21,6 +29,15 @@ type StudentBehaviorInput = {
   homeroomMemo: string;
   status: BulkStatus;
   result: GenerateResponse | null;
+  aiContent: string;
+  editedContent: string;
+  finalContent: string;
+  lifecycleStatus: RecordDraftLifecycleStatus;
+  lastSavedEditedContent: string;
+  pendingRegeneration: GenerateResponse | null;
+  showCompare: boolean;
+  isSavingDraft: boolean;
+  isRegenerating: boolean;
   quality: DraftSimilarityResult | null;
   error: string;
   savedMessage: string;
@@ -55,6 +72,15 @@ function makeInitialStudentInput(): StudentBehaviorInput {
     homeroomMemo: "",
     status: "waiting",
     result: null,
+    aiContent: "",
+    editedContent: "",
+    finalContent: "",
+    lifecycleStatus: "ai_generated",
+    lastSavedEditedContent: "",
+    pendingRegeneration: null,
+    showCompare: false,
+    isSavingDraft: false,
+    isRegenerating: false,
     quality: null,
     error: "",
     savedMessage: ""
@@ -289,7 +315,19 @@ export function BulkBehaviorCommentComposer() {
     [selectedStudents, studentInputs]
   );
   const duplicateQualityStudents = useMemo(
-    () => selectedStudents.filter((student) => studentInputs[student.id]?.quality?.status === "duplicate" && Boolean(studentInputs[student.id]?.result?.draft)),
+    () =>
+      selectedStudents.filter((student) => {
+        const input = studentInputs[student.id];
+        if (input?.quality?.status !== "duplicate") return false;
+        return (
+          getEffectiveRecordContent({
+            finalContent: input.finalContent,
+            editedContent: input.editedContent,
+            aiContent: input.aiContent,
+            draftText: input.result?.draft
+          }).length > 0
+        );
+      }),
     [selectedStudents, studentInputs]
   );
   const qualityRegenerationStudents = useMemo(
@@ -324,7 +362,13 @@ export function BulkBehaviorCommentComposer() {
         const input = studentInputs[student.id] || makeInitialStudentInput();
         if (input.status !== "completed" && input.status !== "failed") return [];
 
-        const hasCompletedDraft = input.status === "completed" && Boolean(input.result?.draft);
+        const effectiveDraft = getEffectiveRecordContent({
+          finalContent: input.finalContent,
+          editedContent: input.editedContent,
+          aiContent: input.aiContent,
+          draftText: input.result?.draft
+        });
+        const hasCompletedDraft = input.status === "completed" && effectiveDraft.trim().length > 0;
         if (input.status === "completed" && !hasCompletedDraft) return [];
 
         return [
@@ -334,7 +378,7 @@ export function BulkBehaviorCommentComposer() {
             number: student.number,
             name: student.name,
             department: departmentOptions.find((option) => option.value === student.department)?.label || student.department,
-            draft: hasCompletedDraft ? input.result?.draft || "" : "",
+            draft: hasCompletedDraft ? effectiveDraft : "",
             similarityPercentage: hasCompletedDraft ? input.quality?.percentage : null,
             similarityStatus: hasCompletedDraft ? input.quality?.status : null,
             generationStatus: input.status
@@ -361,6 +405,15 @@ export function BulkBehaviorCommentComposer() {
             ? {
                 status: "waiting" as BulkStatus,
                 result: null,
+                aiContent: "",
+                editedContent: "",
+                finalContent: "",
+                lifecycleStatus: "ai_generated" as RecordDraftLifecycleStatus,
+                lastSavedEditedContent: "",
+                pendingRegeneration: null,
+                showCompare: false,
+                isSavingDraft: false,
+                isRegenerating: false,
                 quality: null,
                 error: "",
                 savedMessage: ""
@@ -429,6 +482,15 @@ export function BulkBehaviorCommentComposer() {
           homeroomMemo: bulkInput.homeroomMemo.trim().length > 0 ? bulkInput.homeroomMemo : previous.homeroomMemo,
           status: "waiting",
           result: null,
+          aiContent: "",
+          editedContent: "",
+          finalContent: "",
+          lifecycleStatus: "ai_generated",
+          lastSavedEditedContent: "",
+          pendingRegeneration: null,
+          showCompare: false,
+          isSavingDraft: false,
+          isRegenerating: false,
           quality: null,
           error: "",
           savedMessage: ""
@@ -487,6 +549,15 @@ export function BulkBehaviorCommentComposer() {
           homeroomMemo: previousInput.homeroomMemo,
           status: "waiting",
           result: null,
+          aiContent: "",
+          editedContent: "",
+          finalContent: "",
+          lifecycleStatus: "ai_generated",
+          lastSavedEditedContent: "",
+          pendingRegeneration: null,
+          showCompare: false,
+          isSavingDraft: false,
+          isRegenerating: false,
           quality: null,
           error: "",
           savedMessage: ""
@@ -581,6 +652,15 @@ export function BulkBehaviorCommentComposer() {
           ...(next[student.id] || makeInitialStudentInput()),
           status: "queued",
           result: null,
+          aiContent: "",
+          editedContent: "",
+          finalContent: "",
+          lifecycleStatus: "ai_generated",
+          lastSavedEditedContent: "",
+          pendingRegeneration: null,
+          showCompare: false,
+          isSavingDraft: false,
+          isRegenerating: false,
           quality: null,
           error: "",
           savedMessage: ""
@@ -662,6 +742,15 @@ export function BulkBehaviorCommentComposer() {
               ...(current[student.id] || makeInitialStudentInput()),
               status: "failed",
               result,
+              aiContent: result.draft || "",
+              editedContent: result.draft || "",
+              finalContent: "",
+              lifecycleStatus: "ai_generated",
+              lastSavedEditedContent: "",
+              pendingRegeneration: null,
+              showCompare: false,
+              isSavingDraft: false,
+              isRegenerating: false,
               quality: null,
               error: `저장 실패: ${saveResult.error}`,
               savedMessage: ""
@@ -676,6 +765,15 @@ export function BulkBehaviorCommentComposer() {
             ...(current[student.id] || makeInitialStudentInput()),
             status: "completed",
             result,
+            aiContent: result.draft,
+            editedContent: result.draft,
+            finalContent: "",
+            lifecycleStatus: "ai_generated",
+            lastSavedEditedContent: result.draft,
+            pendingRegeneration: null,
+            showCompare: false,
+            isSavingDraft: false,
+            isRegenerating: false,
             quality: null,
             error: "",
             savedMessage: saveMode === "replace-latest" ? "record_drafts 최신 초안 업데이트 완료" : "record_drafts 저장 완료"
@@ -693,6 +791,8 @@ export function BulkBehaviorCommentComposer() {
           [student.id]: {
             ...(current[student.id] || makeInitialStudentInput()),
             status: "failed",
+            isSavingDraft: false,
+            isRegenerating: false,
             quality: null,
             error: message,
             savedMessage: ""
@@ -720,13 +820,331 @@ export function BulkBehaviorCommentComposer() {
     await generateForStudents(failedStudents);
   }
 
+  function updateEditedContent(studentId: string, value: string) {
+    setStudentInputs((current) => {
+      const previous = current[studentId] || makeInitialStudentInput();
+      return {
+        ...current,
+        [studentId]: {
+          ...previous,
+          editedContent: value,
+          finalContent: "",
+          lifecycleStatus: value === previous.lastSavedEditedContent ? "saved" : "editing",
+          pendingRegeneration: null,
+          savedMessage: ""
+        }
+      };
+    });
+  }
+
+  async function saveEditedDraftForStudent(student: Student, source: "manual" | "auto" = "manual") {
+    const input = studentInputs[student.id] || makeInitialStudentInput();
+    const content = input.editedContent || input.aiContent || input.result?.draft || "";
+    if (!content || input.lifecycleStatus === "finalized") return;
+
+    setStudentInputs((current) => ({
+      ...current,
+      [student.id]: {
+        ...(current[student.id] || makeInitialStudentInput()),
+        isSavingDraft: true,
+        savedMessage: ""
+      }
+    }));
+
+    const saveResult = await saveEditedRecordDraft({
+      mode: "behavior",
+      studentId: student.id,
+      payload: buildPayload(student, input),
+      result: input.result,
+      aiContent: input.aiContent || input.result?.draft || content,
+      editedContent: content,
+      status: "saved"
+    });
+
+    setStudentInputs((current) => {
+      const previous = current[student.id] || makeInitialStudentInput();
+      if (saveResult.error) {
+        return {
+          ...current,
+          [student.id]: {
+            ...previous,
+            isSavingDraft: false,
+            savedMessage: `저장 실패: ${saveResult.error}`
+          }
+        };
+      }
+
+      return {
+        ...current,
+        [student.id]: {
+          ...previous,
+          editedContent: content,
+          lifecycleStatus: "saved",
+          lastSavedEditedContent: content,
+          isSavingDraft: false,
+          savedMessage: source === "auto" ? "3초 자동 저장 완료" : "교사 수정본 저장 완료"
+        }
+      };
+    });
+  }
+
+  async function finalizeDraftForStudent(student: Student) {
+    const input = studentInputs[student.id] || makeInitialStudentInput();
+    const content = getEffectiveRecordContent({
+      finalContent: input.finalContent,
+      editedContent: input.editedContent,
+      aiContent: input.aiContent,
+      draftText: input.result?.draft
+    });
+    if (!content) return;
+
+    setStudentInputs((current) => ({
+      ...current,
+      [student.id]: {
+        ...(current[student.id] || makeInitialStudentInput()),
+        isSavingDraft: true,
+        savedMessage: ""
+      }
+    }));
+
+    const saveResult = await finalizeRecordDraft({
+      mode: "behavior",
+      studentId: student.id,
+      payload: buildPayload(student, input),
+      result: input.result,
+      aiContent: input.aiContent || input.result?.draft || content,
+      editedContent: input.editedContent || content,
+      finalContent: content
+    });
+
+    setStudentInputs((current) => {
+      const previous = current[student.id] || makeInitialStudentInput();
+      if (saveResult.error) {
+        return {
+          ...current,
+          [student.id]: {
+            ...previous,
+            isSavingDraft: false,
+            savedMessage: `최종 확정 실패: ${saveResult.error}`
+          }
+        };
+      }
+
+      return {
+        ...current,
+        [student.id]: {
+          ...previous,
+          editedContent: previous.editedContent || content,
+          finalContent: content,
+          lifecycleStatus: "finalized",
+          lastSavedEditedContent: previous.editedContent || content,
+          isSavingDraft: false,
+          savedMessage: "최종본 확정 완료"
+        }
+      };
+    });
+  }
+
+  async function unfinalizeDraftForStudent(student: Student) {
+    const input = studentInputs[student.id] || makeInitialStudentInput();
+    const content = input.editedContent || input.finalContent || input.aiContent || input.result?.draft || "";
+    if (!content) return;
+
+    setStudentInputs((current) => ({
+      ...current,
+      [student.id]: {
+        ...(current[student.id] || makeInitialStudentInput()),
+        isSavingDraft: true,
+        savedMessage: ""
+      }
+    }));
+
+    const saveResult = await unfinalizeRecordDraft({
+      mode: "behavior",
+      studentId: student.id,
+      payload: buildPayload(student, input),
+      result: input.result,
+      aiContent: input.aiContent || input.result?.draft || content,
+      editedContent: content
+    });
+
+    setStudentInputs((current) => {
+      const previous = current[student.id] || makeInitialStudentInput();
+      if (saveResult.error) {
+        return {
+          ...current,
+          [student.id]: {
+            ...previous,
+            isSavingDraft: false,
+            savedMessage: `최종 해제 실패: ${saveResult.error}`
+          }
+        };
+      }
+
+      return {
+        ...current,
+        [student.id]: {
+          ...previous,
+          editedContent: content,
+          finalContent: "",
+          lifecycleStatus: "saved",
+          lastSavedEditedContent: content,
+          isSavingDraft: false,
+          savedMessage: "최종 확정 해제 완료"
+        }
+      };
+    });
+  }
+
+  async function regenerateAiForStudents(targetStudents: Student[]) {
+    const inputSnapshot = new Map(targetStudents.map((student) => [student.id, studentInputs[student.id] || makeInitialStudentInput()]));
+    const runnableStudents = targetStudents.filter((student) => {
+      const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
+      return input.lifecycleStatus !== "finalized" && isStudentReady(input);
+    });
+    if (runnableStudents.length === 0) {
+      setMessage("AI 다시 생성 가능한 학생이 없습니다.");
+      return;
+    }
+
+    setMessage("새 AI 결과를 생성합니다. 기존 교사 수정본은 유지됩니다.");
+    setStudentInputs((current) => {
+      const next = { ...current };
+      runnableStudents.forEach((student) => {
+        next[student.id] = {
+          ...(next[student.id] || makeInitialStudentInput()),
+          isRegenerating: true,
+          pendingRegeneration: null,
+          savedMessage: ""
+        };
+      });
+      return next;
+    });
+
+    await runWithConcurrency(runnableStudents, concurrencyLimit, async (student) => {
+      const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
+      const payload = buildPayload(student, input);
+
+      try {
+        const response = await fetch("/api/generate/behavior-comment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `생성 API 오류: ${response.status}`);
+        }
+
+        const result = (await response.json()) as GenerateResponse;
+        if (!result.draft) {
+          throw new Error(result.warnings?.join(" ") || "새 AI 결과를 생성하지 못했습니다.");
+        }
+
+        setStudentInputs((current) => ({
+          ...current,
+          [student.id]: {
+            ...(current[student.id] || makeInitialStudentInput()),
+            pendingRegeneration: result,
+            isRegenerating: false,
+            savedMessage: "새 AI 결과가 생성되었습니다. 현재 유지 또는 새 결과 사용을 선택하세요."
+          }
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "AI 다시 생성 중 오류가 발생했습니다.";
+        setStudentInputs((current) => ({
+          ...current,
+          [student.id]: {
+            ...(current[student.id] || makeInitialStudentInput()),
+            isRegenerating: false,
+            savedMessage: message
+          }
+        }));
+      }
+    });
+
+    setMessage("AI 다시 생성이 끝났습니다. 각 학생별 새 결과 사용 여부를 선택하세요.");
+  }
+
+  function keepCurrentDraftForStudent(studentId: string) {
+    setStudentInputs((current) => ({
+      ...current,
+      [studentId]: {
+        ...(current[studentId] || makeInitialStudentInput()),
+        pendingRegeneration: null,
+        savedMessage: "현재 수정본을 유지했습니다."
+      }
+    }));
+  }
+
+  async function useRegeneratedDraftForStudent(student: Student) {
+    const input = studentInputs[student.id] || makeInitialStudentInput();
+    if (!input.pendingRegeneration?.draft) return;
+
+    const nextAiContent = input.aiContent || input.result?.draft || input.pendingRegeneration.draft;
+    const nextEditedContent = input.pendingRegeneration.draft;
+
+    setStudentInputs((current) => ({
+      ...current,
+      [student.id]: {
+        ...(current[student.id] || makeInitialStudentInput()),
+        result: input.pendingRegeneration,
+        aiContent: nextAiContent,
+        editedContent: nextEditedContent,
+        finalContent: "",
+        lifecycleStatus: "saved",
+        pendingRegeneration: null,
+        isSavingDraft: true,
+        savedMessage: ""
+      }
+    }));
+
+    const saveResult = await saveEditedRecordDraft({
+      mode: "behavior",
+      studentId: student.id,
+      payload: buildPayload(student, input),
+      result: input.pendingRegeneration,
+      aiContent: nextAiContent,
+      editedContent: nextEditedContent,
+      status: "saved"
+    });
+
+    setStudentInputs((current) => {
+      const previous = current[student.id] || makeInitialStudentInput();
+      if (saveResult.error) {
+        return {
+          ...current,
+          [student.id]: {
+            ...previous,
+            lifecycleStatus: "editing",
+            isSavingDraft: false,
+            savedMessage: `새 결과 저장 실패: ${saveResult.error}`
+          }
+        };
+      }
+
+      return {
+        ...current,
+        [student.id]: {
+          ...previous,
+          lastSavedEditedContent: nextEditedContent,
+          isSavingDraft: false,
+          savedMessage: "새 AI 결과를 교사 수정본으로 저장했습니다."
+        }
+      };
+    });
+  }
+
   async function regenerateQualitySelectedStudents() {
     if (qualityRegenerationStudents.length === 0) {
       setMessage("중복 의심으로 선택된 학생이 없습니다.");
       return;
     }
 
-    await generateForStudents(qualityRegenerationStudents, { includeCompleted: true, saveMode: "replace-latest" });
+    await regenerateAiForStudents(qualityRegenerationStudents);
   }
 
   async function generateSingleStudent(student: Student) {
@@ -736,15 +1154,20 @@ export function BulkBehaviorCommentComposer() {
 
   async function regenerateSingleStudent(student: Student) {
     setSelectedStudentIds((current) => (current.includes(student.id) ? current : [...current, student.id]));
-    const saveMode = studentInputs[student.id]?.result?.draft ? "replace-latest" : "insert";
-    await generateForStudents([student], { includeCompleted: true, saveMode });
+    await regenerateAiForStudents([student]);
   }
 
   async function copyDraft(studentId: string) {
-    const result = studentInputs[studentId]?.result;
-    if (!result?.draft) return;
+    const input = studentInputs[studentId] || makeInitialStudentInput();
+    const content = getEffectiveRecordContent({
+      finalContent: input.finalContent,
+      editedContent: input.editedContent,
+      aiContent: input.aiContent,
+      draftText: input.result?.draft
+    });
+    if (!content) return;
 
-    await navigator.clipboard.writeText(result.draft);
+    await navigator.clipboard.writeText(content);
     patchStudentInput(studentId, { savedMessage: "클립보드에 복사했습니다." }, false);
   }
 
@@ -759,6 +1182,29 @@ export function BulkBehaviorCommentComposer() {
       setMessage(errorMessage);
     }
   }
+
+  useEffect(() => {
+    const dirtyStudents = students.filter((student) => {
+      const input = studentInputs[student.id];
+      return (
+        input?.status === "completed" &&
+        input.lifecycleStatus !== "finalized" &&
+        !input.isSavingDraft &&
+        Boolean(input.editedContent) &&
+        input.editedContent !== input.lastSavedEditedContent
+      );
+    });
+
+    if (dirtyStudents.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      dirtyStudents.forEach((student) => {
+        void saveEditedDraftForStudent(student, "auto");
+      });
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [studentInputs, students, lengthOption, writingStyle, writingPerspective]);
 
   return (
     <div className="min-w-0 space-y-5">
@@ -959,6 +1405,7 @@ export function BulkBehaviorCommentComposer() {
               {filteredStudents.map((student) => {
                 const input = studentInputs[student.id] || makeInitialStudentInput();
                 const statusMeta = getStatusMeta(input.status);
+                const lifecycleMeta = getRecordDraftLifecycleStatusMeta(input.lifecycleStatus);
                 const warnings = getStudentWarnings(input);
                 const isRowGenerating = input.status === "generating" || input.status === "queued";
                 const selected = selectedStudentIdSet.has(student.id);
@@ -1065,6 +1512,12 @@ export function BulkBehaviorCommentComposer() {
                         {input.status === "generating" ? <Loader2 className="mr-1 animate-spin" size={13} aria-hidden="true" /> : null}
                         {statusMeta.label}
                       </span>
+                      {input.result?.draft ? (
+                        <span className={`mt-2 inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${lifecycleMeta.className}`}>
+                          <span className={`mr-1 h-2 w-2 rounded-full ${lifecycleMeta.dotClassName}`} aria-hidden="true" />
+                          {lifecycleMeta.label}
+                        </span>
+                      ) : null}
                       {input.savedMessage ? <p className="mt-2 text-xs font-semibold text-emerald-700">{input.savedMessage}</p> : null}
                     </td>
                     <td className="px-3 py-3">
@@ -1126,49 +1579,48 @@ export function BulkBehaviorCommentComposer() {
             {selectedStudents.map((student) => {
               const input = studentInputs[student.id] || makeInitialStudentInput();
               const statusMeta = getStatusMeta(input.status);
-              const hasDraft = Boolean(input.result?.draft);
+              const effectiveDraft = getEffectiveRecordContent({
+                finalContent: input.finalContent,
+                editedContent: input.editedContent,
+                aiContent: input.aiContent,
+                draftText: input.result?.draft
+              });
+              const hasDraft = effectiveDraft.length > 0;
               const qualityMeta = getDraftSimilarityStatusMeta(input.quality?.status);
               const qualityPercentage = input.quality ? `${input.quality.percentage}%` : "-";
               const isDuplicateQuality = input.quality?.status === "duplicate" && hasDraft;
               const qualityChecked = isDuplicateQuality && qualitySelectedStudentIdSet.has(student.id);
-              const canRegenerate = !isGenerating && !["queued", "generating"].includes(input.status) && (hasDraft || input.status === "failed") && isStudentReady(input);
+              const canRegenerate =
+                input.lifecycleStatus !== "finalized" &&
+                !isGenerating &&
+                !input.isRegenerating &&
+                !["queued", "generating"].includes(input.status) &&
+                (hasDraft || input.status === "failed") &&
+                isStudentReady(input);
 
               return (
-                <article key={student.id} className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-[220px_minmax(0,1fr)_140px]">
-                  <div>
-                    <p className="font-bold text-slate-950">
-                      {student.className} {student.number}번 {student.name}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {student.grade} · {departmentLabel(student.department)}
-                    </p>
-                    <div className="mt-3 grid gap-2">
-                      <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>상태 {statusMeta.label}</span>
+                <BulkDraftLifecycleEditor
+                  key={student.id}
+                  studentInfo={
+                    <>
+                      <p className="font-bold text-slate-950">
+                        {student.className} {student.number}번 {student.name}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {student.grade} · {departmentLabel(student.department)}
+                      </p>
+                      {input.quality?.matchedStudentName ? <p className="mt-2 text-xs font-semibold text-slate-500">가장 유사: {input.quality.matchedStudentName}</p> : null}
+                    </>
+                  }
+                  statusBadges={
+                    <>
+                      <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>생성 {statusMeta.label}</span>
                       <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${qualityMeta.className}`}>
                         유사도 {qualityPercentage} · {qualityMeta.label}
                       </span>
-                    </div>
-                    {input.quality?.matchedStudentName ? <p className="mt-2 text-xs font-semibold text-slate-500">가장 유사: {input.quality.matchedStudentName}</p> : null}
-                  </div>
-
-                  <div>
-                    <div className={`min-h-28 rounded-md border p-3 text-sm leading-6 ${input.error ? "border-rose-200 bg-rose-50 text-rose-900" : "border-slate-200 bg-slate-50 text-slate-800"}`}>
-                      {input.result?.draft || input.error || "아직 생성 결과가 없습니다."}
-                    </div>
-                    {input.result?.warnings && input.result.warnings.length > 0 ? (
-                      <details className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-                        <summary className="cursor-pointer font-bold">확인 필요</summary>
-                        <ul className="mt-2 list-disc space-y-1 pl-4">
-                          {input.result.warnings.map((warning) => (
-                            <li key={warning}>{warning}</li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : null}
-                    {input.savedMessage ? <p className="mt-2 text-xs font-semibold text-emerald-700">{input.savedMessage}</p> : null}
-                  </div>
-
-                  <div className="grid content-start gap-2">
+                    </>
+                  }
+                  qualitySelector={
                     <label
                       className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold ${
                         isDuplicateQuality ? "border-rose-200 bg-rose-50 text-rose-800" : "border-slate-200 bg-slate-50 text-slate-500"
@@ -1179,20 +1631,34 @@ export function BulkBehaviorCommentComposer() {
                         className="h-4 w-4"
                         checked={qualityChecked}
                         onChange={() => toggleQualitySelection(student.id)}
-                        disabled={!isDuplicateQuality || isGenerating}
+                        disabled={!isDuplicateQuality || isGenerating || input.lifecycleStatus === "finalized"}
                       />
                       중복 의심 선택
                     </label>
-                    <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => copyDraft(student.id)} disabled={!hasDraft}>
-                      <Clipboard size={15} aria-hidden="true" />
-                      복사
-                    </button>
-                    <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => regenerateSingleStudent(student)} disabled={!canRegenerate}>
-                      <RefreshCcw size={15} aria-hidden="true" />
-                      재생성
-                    </button>
-                  </div>
-                </article>
+                  }
+                  aiContent={input.aiContent}
+                  editedContent={input.editedContent}
+                  finalContent={input.finalContent}
+                  draftText={input.result?.draft}
+                  lifecycleStatus={input.lifecycleStatus}
+                  error={input.error}
+                  warnings={input.result?.warnings}
+                  savedMessage={input.savedMessage}
+                  pendingRegeneration={input.pendingRegeneration}
+                  showCompare={input.showCompare}
+                  isSaving={input.isSavingDraft}
+                  isRegenerating={input.isRegenerating}
+                  canRegenerate={canRegenerate}
+                  onEditedContentChange={(value) => updateEditedContent(student.id, value)}
+                  onSave={() => void saveEditedDraftForStudent(student)}
+                  onCopy={() => void copyDraft(student.id)}
+                  onToggleCompare={() => patchStudentInput(student.id, { showCompare: !input.showCompare }, false)}
+                  onRegenerate={() => void regenerateSingleStudent(student)}
+                  onKeepCurrentDraft={() => keepCurrentDraftForStudent(student.id)}
+                  onUseRegeneratedDraft={() => void useRegeneratedDraftForStudent(student)}
+                  onFinalize={() => void finalizeDraftForStudent(student)}
+                  onUnfinalize={() => void unfinalizeDraftForStudent(student)}
+                />
               );
             })}
           </div>
