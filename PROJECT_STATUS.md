@@ -6,19 +6,19 @@
 
 공업계 마이스터고 학생부 작성 지원 플랫폼은 Next.js 15 App Router, TypeScript, TailwindCSS, Supabase Auth/DB, Gemini API, Vercel 기반으로 동작한다.
 
-현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 과세특 일괄 생성, 행동특성 및 종합의견 생성, 행동특성 및 종합의견 일괄 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영과 학생별 분산 선택, 일괄 생성 결과 품질 관리와 결과 엑셀 다운로드 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다. 데스크톱 레이아웃은 `AppShell` 중심의 넓은 앱 컨테이너와 `min-w-0`/내부 테이블 스크롤 구조로 정리되어 페이지 전체 가로 스크롤이 발생하지 않도록 조정했다. 행동특성 일괄 생성 payload는 화면 state와 API payload의 매핑을 점검해 `schoolLifeAreas`와 `industrialAttitudes`를 분리 전달하도록 수정했다.
+현재 앱은 회원가입/로그인, 학생 관리, 학생 엑셀 업로드, 학생 엑셀 양식 다운로드, 과세특 생성, 과세특 일괄 생성, 행동특성 및 종합의견 생성, 행동특성 및 종합의견 일괄 생성, 관리자 설정, 과목/성취기준 관리, 과세특 생성 시 성취기준 프롬프트 반영과 학생별 분산 선택, 일괄 생성 결과 품질 관리, 결과 편집, 최종본 확정, 결과 엑셀 다운로드 기능까지 구현되어 있다. 관리자 설정값은 Supabase DB를 우선 사용하고, DB 데이터가 없거나 로딩 전이면 기존 `lib/options.ts` 상수를 fallback으로 사용한다. 데스크톱 레이아웃은 `AppShell` 중심의 넓은 앱 컨테이너와 `min-w-0`/내부 테이블 스크롤 구조로 정리되어 페이지 전체 가로 스크롤이 발생하지 않도록 조정했다. 행동특성 일괄 생성 payload는 화면 state와 API payload의 매핑을 점검해 `schoolLifeAreas`와 `industrialAttitudes`를 분리 전달하도록 수정했다.
 
 ## 현재 프로젝트 진행률
 
-현재 진행률은 약 93%이다.
+현재 진행률은 약 96%이다.
 
 - 핵심 작성 흐름: 과세특/행동특성 단일 생성과 일괄 생성 완료
 - 데이터 관리: 학생 CRUD, 엑셀 업로드/양식 다운로드, 관리자 설정, 과목/성취기준, 체크리스트 관리 완료
-- 저장 흐름: 생성 결과 `record_drafts` insert 저장과 품질 재생성 update 저장 완료
+- 저장 흐름: 생성 결과 `record_drafts` insert 저장, 교사 수정본 저장, 최종본 확정 완료
 - 품질 관리: 생성 결과 유사도 분석, 70~84% 유사 표시, 85% 이상 중복 의심 표시, 선택 학생 재생성 완료
-- 내보내기: 과세특/행특 일괄 생성 결과 엑셀 다운로드 완료
+- 내보내기: 과세특/행특 일괄 생성 결과 엑셀 다운로드 완료, 최종본 선택 규칙 적용 완료
 - 레이아웃 안정화: 앱 전체 가로 스크롤 제거, 일괄 입력 테이블 내부 스크롤 구조 적용 완료
-- 남은 주요 작업: 생성 결과 편집 기능, 생성 이력 관리, RAG 고도화
+- 남은 주요 작업: 생성 이력 관리, RAG 고도화
 
 ## 현재 완료 기능
 
@@ -61,6 +61,12 @@
 - 재생성 시 `record_drafts` 최신 row 업데이트 저장 경로 완료
 - 과세특 일괄 생성 결과 엑셀 다운로드 완료
 - 행특 일괄 생성 결과 엑셀 다운로드 완료
+- 과세특/행동특성 단일 생성 결과 편집기 완료
+- 과세특/행동특성 일괄 생성 결과 학생별 편집기 완료
+- 학생부 lifecycle 완료: AI 원본, 교사 수정본, 최종본
+- AI 원본 비교, AI 다시 생성 후보 선택, 최종 확정/해제 완료
+- 교사 수정본 3초 자동 저장과 명시적 저장 완료
+- 복사와 엑셀 다운로드 최종본 선택 규칙 적용 완료
 - 데스크톱 레이아웃 가로 스크롤 문제 개선 완료
 - `AppShell`, `Dashboard`, `RecordComposer`, `DesktopRecordComposer`, `BulkSubjectCommentComposer`, `BulkBehaviorCommentComposer`, `StudentManager`, `CurriculumManager` 공통 레이아웃 폭/스크롤 구조 점검 완료
 - 학생별 입력 테이블은 필요한 경우 내부 컨테이너에서만 가로 스크롤되도록 조정 완료
@@ -111,6 +117,13 @@
 - 관련도 높은 후보군 안에서 `selectedStudentId`, `student_no`, 학생 이름, 현재 날짜 기반 seed 랜덤 선택으로 최대 3개 성취기준 주입
 - 생성 결과 복사 기능
 - 생성 결과 Supabase `record_drafts` 저장 기능
+- 단일 생성 결과 편집기 구현
+  - AI 생성 직후 `ai_content`와 `edited_content`를 초기 저장
+  - 교사 수정본은 textarea에서 직접 수정
+  - 수정 후 3초 자동 저장 또는 저장 버튼으로 `edited_content` 갱신
+  - `AI 원본 보기`로 AI 원본과 현재 수정본을 좌우 비교
+  - `AI 다시 생성` 결과는 기존 수정본을 덮어쓰지 않고 `현재 유지` 또는 `새 결과 사용` 선택 후 반영
+  - `최종 확정`은 `final_content`를 저장하고, `최종 해제`로 수정 가능 상태로 되돌림
 - 과세특 일괄 생성:
   - `/bulk-subject-comment` 라우트 추가
   - 학년/반/학과 필터, 필터 결과 전체 선택, 학생별 입력 테이블 내 개별 선택 구현
@@ -127,10 +140,11 @@
   - 브라우저 측 worker 방식으로 동시 생성 수를 3개로 제한
   - 학생별 상태를 대기, 생성 중, 완료, 실패로 표시
   - 생성 결과는 입력 테이블 컬럼에 넣지 않고 테이블 아래 별도 생성 결과 영역에 학생별 표시
-  - 생성 결과 복사와 실패 학생 재생성 가능
+  - 생성 결과 복사, 교사 수정본 저장, AI 원본 비교, AI 다시 생성, 최종 확정/해제 가능
   - 생성 결과 영역 상단 오른쪽에서 `subject-comments-results.xlsx` 파일로 결과 엑셀 다운로드 가능
   - 생성 성공 시 `saveRecordDraft()`로 `record_drafts`에 자동 저장
-  - 품질 재생성 시 같은 교사/학생/mode 최신 `record_drafts` row를 update
+  - 교사 수정본은 3초 자동 저장 또는 저장 버튼으로 `edited_content`에 저장
+  - AI 다시 생성 결과는 기존 수정본을 덮지 않고 후보로 표시한 뒤 선택 시 저장
   - 실패한 학생만 다시 생성 가능
 - 행동특성 일괄 생성:
   - `/bulk-behavior-comment` 라우트 추가
@@ -145,21 +159,22 @@
   - 브라우저 측 worker 방식으로 동시 생성 수를 3개로 제한
   - 학생별 상태를 대기, 생성 중, 완료, 실패로 표시
   - 생성 결과는 입력 테이블 아래 별도 영역에 학생별 표시
-  - 생성 결과 복사와 실패 학생 재생성 가능
+  - 생성 결과 복사, 교사 수정본 저장, AI 원본 비교, AI 다시 생성, 최종 확정/해제 가능
   - 생성 결과 영역 상단 오른쪽에서 `behavior-comments-results.xlsx` 파일로 결과 엑셀 다운로드 가능
   - 생성 성공 시 `saveRecordDraft()`로 `record_drafts`에 `mode=behavior` 저장
-  - 품질 재생성 시 같은 교사/학생/mode 최신 `record_drafts` row를 update
+  - 교사 수정본은 3초 자동 저장 또는 저장 버튼으로 `edited_content`에 저장
+  - AI 다시 생성 결과는 기존 수정본을 덮지 않고 후보로 표시한 뒤 선택 시 저장
   - 실패한 학생만 다시 생성 가능
 - 생성 품질 관리:
   - 과세특/행동특성 일괄 생성 완료 후 이번 생성에서 성공한 학생 초안만 비교
   - 학생 이름을 제거한 초안 텍스트를 단어 토큰과 문자 2~3gram 벡터로 변환한 뒤 cosine similarity 계산
   - 각 학생은 같은 생성 묶음 안에서 가장 유사한 다른 학생과의 최고 유사도를 표시
   - 85% 이상은 빨간색 `중복 의심`, 70~84%는 노란색 `유사`, 70% 미만은 `정상`
-  - 결과 영역은 학생명, 유사도, 복사, 재생성, 상태를 함께 표시
-  - `중복 의심` 학생만 체크박스로 선택 가능하며, `선택 학생 재생성`으로 기존 과세특/행동특성 생성 API를 다시 호출
+  - 결과 영역은 학생명, 유사도, 복사, 저장, AI 원본 비교, AI 다시 생성, 최종 확정, 상태를 함께 표시
+  - `중복 의심` 학생만 체크박스로 선택 가능하며, `선택 학생 재생성`으로 기존 과세특/행동특성 생성 API를 다시 호출해 새 AI 후보를 표시
   - 과세특 재생성은 기존 성취기준 조회, 관련도 기반 선택, 학생 seed 기반 분산 로직을 변경하지 않고 같은 payload로 재호출
-  - 재생성 저장은 같은 교사/학생/mode의 최신 `record_drafts` row를 update하고, 기존 row가 없으면 insert로 fallback
-  - 결과 엑셀 다운로드는 현재 화면의 완료 결과를 기준으로 하며, 실패 항목은 생성 결과를 빈칸으로 두고 생성 상태를 `실패`로 표시한다.
+  - 새 AI 후보는 `현재 유지` 또는 `새 결과 사용` 선택 전에는 `edited_content`와 `final_content`를 덮어쓰지 않는다.
+  - 결과 엑셀 다운로드는 `final_content`, `edited_content`, `ai_content` 순서의 최종 출력 내용을 사용하며, 실패 항목은 생성 결과를 빈칸으로 두고 생성 상태를 `실패`로 표시한다.
 
 ### 레이아웃과 스타일 안정화
 
@@ -302,14 +317,19 @@ Supabase Auth 사용자와 앱 프로필을 연결한다.
 
 ### record_drafts
 
-생성된 과세특/행동특성 초안과 입력 payload를 저장한다.
+생성된 과세특/행동특성의 AI 원본, 교사 수정본, 최종본과 입력 payload를 저장한다.
 
 - `mode`: `subject` 또는 `behavior`
 - `input_payload`
 - `result_payload`
-- `draft_text`
-- `updated_at`: 품질 재생성으로 최신 초안 row가 수정된 시각
-- 품질 재생성 저장은 같은 `school_id`, `user_id`, `student_id`, `mode`의 최신 row를 update한다.
+- `draft_text`: 이전 코드와의 호환을 위한 현재 출력 텍스트
+- `ai_content`: AI가 처음 생성한 원본이며 직접 수정하지 않는다.
+- `edited_content`: 교사가 편집하고 저장한 수정본
+- `final_content`: 교사가 최종 확정한 출력본
+- `status`: `ai_generated`, `editing`, `saved`, `finalized`
+- `edited_at`, `finalized_at`, `edited_by`
+- `updated_at`: 최신 row가 수정된 시각
+- 복사와 엑셀 다운로드는 `final_content`, `edited_content`, `ai_content` 순서로 출력 내용을 선택한다.
 
 ### departments
 
@@ -430,6 +450,13 @@ supabase/migrations/20260629_record_draft_quality_updates.sql
 - `record_drafts` update 시각 자동 갱신 트리거 추가
 - 같은 교사/학생/mode 최신 초안 조회용 인덱스 추가
 - 품질 재생성 저장을 위한 본인 소유 `record_drafts` update RLS 정책 추가
+
+`20260630_record_draft_lifecycle.sql`:
+
+- `record_drafts.ai_content`, `edited_content`, `final_content` 컬럼 추가
+- `record_drafts.status`, `edited_at`, `finalized_at`, `edited_by` 컬럼 추가
+- 기존 `draft_text`를 `ai_content`와 `edited_content`로 backfill
+- lifecycle 상태 check constraint와 조회 인덱스 추가
 
 ## 최근 해결한 문제
 
@@ -583,13 +610,12 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 ## 다음 개발 우선순위
 
-1. 생성 결과 편집 기능
-2. 생성 이력 관리
-3. RAG 고도화: 학습목표, NCS, 루브릭, 교과서 활용
+1. 생성 이력 관리
+2. RAG 고도화: 학습목표, NCS, 루브릭, 교과서 활용
 
 ### 다음 단계 설계 방향
 
-다음 1순위는 생성된 초안을 화면에서 편집하는 기능이다. 이후 생성 이력을 조회/관리한 뒤, 업로드 자료와 성취기준을 활용하는 RAG 고도화로 확장한다.
+다음 1순위는 생성 이력 조회와 관리 기능이다. 이후 업로드 자료와 성취기준을 활용하는 RAG 고도화로 확장한다.
 
 ```text
 과목 선택
@@ -610,7 +636,7 @@ Gemini 프롬프트 주입
 - 검색된 단원명, 성취기준, 핵심키워드는 관련도 기반 + seed 랜덤 분산 선택 후 최대 3개까지 Gemini 프롬프트 컨텍스트로 주입한다.
 - `getCurriculumStandardsBySubject()`는 선택적 `limit` 옵션을 지원하지만, 현재 과세특 생성 기본 경로는 전체 후보를 가져와 별도 선택 로직에서 최대 3개를 고른다.
 - RAG 고도화 단계에서는 현재 규칙 기반 관련도 점수를 벡터 검색/RAG와 통합한다.
-- 과세특/행동특성 일괄 생성, 품질 관리, 결과 엑셀 다운로드는 완료됐다.
+- 과세특/행동특성 일괄 생성, 품질 관리, 결과 편집, 최종본 확정, 결과 엑셀 다운로드는 완료됐다.
 
 ## 중요한 설계 결정
 
@@ -633,7 +659,8 @@ Gemini 프롬프트 주입
 - 행동특성 일괄 생성 payload는 `schoolLifeAreas`와 `industrialAttitudes`를 분리한다. 학교생활 영역은 `schoolLifeAreas`, 생활태도 키워드/협업·관계/책임감·성실성은 `industrialAttitudes`로 전달한다.
 - 생성 품질 관리는 기존 생성 API, 학생 CRUD, 관리자 기능, 성취기준 조회 로직을 수정하지 않고 일괄 생성 UI 후처리와 저장 함수 옵션으로만 연결한다.
 - 중복도 분석 대상은 이번 생성에서 성공한 학생 초안으로 제한한다.
-- 중복 의심 선택 재생성은 기존 payload를 사용해 같은 생성 API를 재호출하고, 재생성 결과만 `record_drafts` 최신 row update 저장을 사용한다.
+- 중복 의심 선택 재생성은 기존 payload를 사용해 같은 생성 API를 재호출하고, 새 AI 결과 후보를 표시한 뒤 교사가 `새 결과 사용`을 선택할 때만 `edited_content`에 저장한다.
+- 복사와 엑셀 다운로드는 항상 `final_content`, `edited_content`, `ai_content` 순서로 출력 내용을 선택한다.
 - `/bulk-behavior-comment`에는 과목명, 단원명, 성취기준 입력을 두지 않는다.
 - `/bulk-behavior-comment`의 화면 우선순위는 공통 설정, 학생별 입력 테이블, 생성 버튼, 생성 결과, 일괄 적용 보조 기능 순서로 유지한다.
 - 레이아웃 변경은 기능 로직을 건드리지 않고 Tailwind class, 컨테이너 폭, grid/flex 최소 폭, overflow 경계만 조정한다.
