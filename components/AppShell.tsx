@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpenCheck, BookOpenText, ClipboardList, Database, Home, ListChecks, PenLine, Settings, UsersRound } from "lucide-react";
+import { BookOpenCheck, BookOpenText, ClipboardList, Database, FileText, Home, ListChecks, PenLine, Settings, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ensureUserProfile } from "@/lib/students";
 
@@ -12,6 +12,7 @@ const navItems = [
   { href: "/bulk-subject-comment", label: "일괄 세특", icon: ListChecks },
   { href: "/behavior-comment", label: "행동특성", icon: ClipboardList },
   { href: "/bulk-behavior-comment", label: "일괄 행특", icon: ClipboardList },
+  { href: "/student-records", label: "학생부 관리", icon: FileText },
   { href: "/knowledge", label: "문서", icon: Database },
   { href: "/admin/curriculum", label: "과목/성취기준", icon: BookOpenText },
   { href: "/students", label: "학생 관리", icon: UsersRound }
