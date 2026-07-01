@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clipboard, Copy, Download, Loader2, Play, RefreshCcw, Search, Sparkles, UsersRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw, Search, Sparkles, UsersRound } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
 import { downloadSubjectCommentResults, type SubjectCommentResultExportRow } from "@/lib/export-results";
@@ -200,6 +200,7 @@ export function BulkSubjectCommentComposer() {
   const [studentInputs, setStudentInputs] = useState<Record<string, StudentSubjectInput>>({});
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [qualitySelectedStudentIds, setQualitySelectedStudentIds] = useState<string[]>([]);
+  const [includeFinalizedInRegeneration, setIncludeFinalizedInRegeneration] = useState(false);
   const [gradeFilter, setGradeFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
@@ -280,14 +281,19 @@ export function BulkSubjectCommentComposer() {
 
   const selectedStudents = useMemo(() => students.filter((student) => selectedStudentIdSet.has(student.id)), [selectedStudentIdSet, students]);
   const failedStudents = useMemo(
-    () => selectedStudents.filter((student) => studentInputs[student.id]?.status === "failed"),
-    [selectedStudents, studentInputs]
+    () =>
+      selectedStudents.filter((student) => {
+        const input = studentInputs[student.id];
+        return input?.status === "failed" && (includeFinalizedInRegeneration || input.lifecycleStatus !== "finalized");
+      }),
+    [includeFinalizedInRegeneration, selectedStudents, studentInputs]
   );
   const duplicateQualityStudents = useMemo(
     () =>
       selectedStudents.filter((student) => {
         const input = studentInputs[student.id];
         if (input?.quality?.status !== "duplicate") return false;
+        if (!includeFinalizedInRegeneration && input.lifecycleStatus === "finalized") return false;
         return (
           getEffectiveRecordContent({
             finalContent: input.finalContent,
@@ -297,7 +303,7 @@ export function BulkSubjectCommentComposer() {
           }).length > 0
         );
       }),
-    [selectedStudents, studentInputs]
+    [includeFinalizedInRegeneration, selectedStudents, studentInputs]
   );
   const qualityRegenerationStudents = useMemo(
     () => duplicateQualityStudents.filter((student) => qualitySelectedStudentIdSet.has(student.id)),
@@ -305,7 +311,10 @@ export function BulkSubjectCommentComposer() {
   );
   const isGenerating = selectedStudents.some((student) => ["queued", "generating"].includes(studentInputs[student.id]?.status || "waiting"));
   const allFilteredSelected = filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id));
-  const readySelectedCount = selectedStudents.filter((student) => isStudentReady(studentInputs[student.id] || makeInitialStudentInput())).length;
+  const readySelectedCount = selectedStudents.filter((student) => {
+    const input = studentInputs[student.id] || makeInitialStudentInput();
+    return input.status !== "completed" && input.lifecycleStatus !== "finalized" && isStudentReady(input);
+  }).length;
   const canGenerate = Boolean(subjectName.trim()) && readySelectedCount > 0 && !isGenerating;
 
   const statusCounts = selectedStudents.reduce(
@@ -560,7 +569,9 @@ export function BulkSubjectCommentComposer() {
   }
 
   function toggleQualitySelection(studentId: string) {
-    if (studentInputs[studentId]?.quality?.status !== "duplicate") return;
+    const input = studentInputs[studentId];
+    if (input?.quality?.status !== "duplicate") return;
+    if (!includeFinalizedInRegeneration && input.lifecycleStatus === "finalized") return;
     setQualitySelectedStudentIds((current) => (current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]));
   }
 
@@ -585,26 +596,56 @@ export function BulkSubjectCommentComposer() {
     };
   }
 
-  async function generateForStudents(targetStudents: Student[], saveMode: "insert" | "replace-latest" = "insert") {
+  async function generateForStudents(
+    targetStudents: Student[],
+    options: { includeCompleted?: boolean; includeFinalized?: boolean; saveMode?: "insert" | "replace-latest" } = {}
+  ) {
     if (!subjectName.trim()) {
       setMessage("과목명을 입력하세요.");
       return;
     }
 
+    const saveMode = options.saveMode || "insert";
     const inputSnapshot = new Map(targetStudents.map((student) => [student.id, studentInputs[student.id] || makeInitialStudentInput()]));
+    const finalizedSkippedCount = targetStudents.filter((student) => {
+      const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
+      return !options.includeFinalized && input.lifecycleStatus === "finalized";
+    }).length;
+    const completedSkippedCount = targetStudents.filter((student) => {
+      const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
+      return !options.includeCompleted && (options.includeFinalized || input.lifecycleStatus !== "finalized") && input.status === "completed";
+    }).length;
+    const notReadySkippedCount = targetStudents.filter((student) => {
+      const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
+      return (
+        (options.includeCompleted || input.status !== "completed") &&
+        (options.includeFinalized || input.lifecycleStatus !== "finalized") &&
+        !isStudentReady(input)
+      );
+    }).length;
     const runnableStudents = targetStudents.filter((student) => {
       const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
-      return input.lifecycleStatus !== "finalized" && isStudentReady(input);
+      return (options.includeCompleted || input.status !== "completed") && (options.includeFinalized || input.lifecycleStatus !== "finalized") && isStudentReady(input);
     });
-    const skippedCount = targetStudents.length - runnableStudents.length;
     const generatedDrafts: DraftSimilarityInput[] = [];
 
     if (runnableStudents.length === 0) {
-      setMessage("생성 가능한 학생이 없습니다. 교사 관찰 메모, 활동유형, 역량키워드, 보완점 중 하나 이상 입력하세요.");
+      setMessage(
+        finalizedSkippedCount > 0 && notReadySkippedCount === 0
+          ? "생성 가능한 학생이 없습니다. 최종 확정 학생은 기본적으로 제외됩니다."
+          : completedSkippedCount > 0 && finalizedSkippedCount === 0 && notReadySkippedCount === 0
+            ? "생성 가능한 학생이 없습니다. 이미 완료된 학생은 제외됩니다."
+          : "생성 가능한 학생이 없습니다. 교사 관찰 메모, 활동유형, 역량키워드, 보완점 중 하나 이상 입력하세요."
+      );
       return;
     }
 
-    setMessage(skippedCount > 0 ? `생성 근거가 없는 ${skippedCount}명은 대기 상태로 남기고 생성합니다.` : "");
+    const skippedMessages = [
+      finalizedSkippedCount > 0 ? `최종 확정 ${finalizedSkippedCount}명 제외` : "",
+      completedSkippedCount > 0 ? `완료 ${completedSkippedCount}명 제외` : "",
+      notReadySkippedCount > 0 ? `생성 근거 없는 ${notReadySkippedCount}명 대기` : ""
+    ].filter(Boolean);
+    setMessage(skippedMessages.length > 0 ? `${skippedMessages.join(", ")} 후 생성합니다.` : "");
     setStudentInputs((current) => {
       const next = { ...current };
       runnableStudents.forEach((student) => {
@@ -744,7 +785,7 @@ export function BulkSubjectCommentComposer() {
   }
 
   async function regenerateFailedStudents() {
-    await generateForStudents(failedStudents);
+    await generateForStudents(failedStudents, { includeFinalized: includeFinalizedInRegeneration });
   }
 
   function updateEditedContent(studentId: string, value: string) {
@@ -923,16 +964,23 @@ export function BulkSubjectCommentComposer() {
     });
   }
 
-  async function regenerateAiForStudents(targetStudents: Student[]) {
+  async function regenerateAiForStudents(targetStudents: Student[], options: { includeFinalized?: boolean } = {}) {
     if (!subjectName.trim()) {
       setMessage("과목명을 입력하세요.");
       return;
     }
 
     const inputSnapshot = new Map(targetStudents.map((student) => [student.id, studentInputs[student.id] || makeInitialStudentInput()]));
-    const runnableStudents = targetStudents.filter((student) => isStudentReady(inputSnapshot.get(student.id) || makeInitialStudentInput()));
+    const finalizedSkippedCount = targetStudents.filter((student) => {
+      const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
+      return !options.includeFinalized && input.lifecycleStatus === "finalized";
+    }).length;
+    const runnableStudents = targetStudents.filter((student) => {
+      const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
+      return (options.includeFinalized || input.lifecycleStatus !== "finalized") && isStudentReady(input);
+    });
     if (runnableStudents.length === 0) {
-      setMessage("AI 다시 생성 가능한 학생이 없습니다.");
+      setMessage(finalizedSkippedCount > 0 ? "AI 다시 생성 가능한 학생이 없습니다. 최종 확정 학생은 기본적으로 제외됩니다." : "AI 다시 생성 가능한 학생이 없습니다.");
       return;
     }
 
@@ -1073,7 +1121,7 @@ export function BulkSubjectCommentComposer() {
       return;
     }
 
-    await regenerateAiForStudents(qualityRegenerationStudents);
+    await regenerateAiForStudents(qualityRegenerationStudents, { includeFinalized: includeFinalizedInRegeneration });
   }
 
   async function generateSingleStudent(student: Student) {
@@ -1083,7 +1131,7 @@ export function BulkSubjectCommentComposer() {
 
   async function regenerateSingleStudent(student: Student) {
     setSelectedStudentIds((current) => (current.includes(student.id) ? current : [...current, student.id]));
-    await regenerateAiForStudents([student]);
+    await regenerateAiForStudents([student], { includeFinalized: includeFinalizedInRegeneration });
   }
 
   async function copyDraft(studentId: string) {
@@ -1306,14 +1354,6 @@ export function BulkSubjectCommentComposer() {
               <RefreshCcw size={17} aria-hidden="true" />
               실패만 재생성
             </button>
-            <button className="secondary-button" type="button" onClick={applyBulkInputToSelected} disabled={selectedStudents.length === 0 || isGenerating}>
-              <Copy size={17} aria-hidden="true" />
-              선택 학생에게 값 일괄 적용
-            </button>
-            <button className="secondary-button" type="button" onClick={copyPreviousValuesToSelected} disabled={selectedStudents.length === 0 || isGenerating}>
-              <Copy size={17} aria-hidden="true" />
-              이전 학생 값 복사
-            </button>
           </div>
         </div>
 
@@ -1364,6 +1404,8 @@ export function BulkSubjectCommentComposer() {
                 const isRowGenerating = input.status === "generating" || input.status === "queued";
                 const selected = selectedStudentIdSet.has(student.id);
                 const rowReady = isStudentReady(input);
+                const rowCompleted = input.status === "completed";
+                const rowFinalized = input.lifecycleStatus === "finalized";
 
                 return (
                   <tr key={student.id} className={`align-top ${selected ? "bg-blue-50/30" : ""}`}>
@@ -1461,10 +1503,10 @@ export function BulkSubjectCommentComposer() {
                           className="secondary-button min-h-10 px-3 py-1.5"
                           type="button"
                           onClick={() => generateSingleStudent(student)}
-                          disabled={isGenerating || !subjectName.trim() || !rowReady}
+                          disabled={isGenerating || !subjectName.trim() || !rowReady || rowCompleted || rowFinalized}
                         >
                           <Play size={15} aria-hidden="true" />
-                          {input.status === "failed" ? "재생성" : "개별 생성"}
+                          {input.status === "failed" ? "재생성" : rowCompleted ? "완료" : "개별 생성"}
                         </button>
                       </div>
                     </td>
@@ -1496,11 +1538,28 @@ export function BulkSubjectCommentComposer() {
                 disabled={qualityRegenerationStudents.length === 0 || isGenerating || !subjectName.trim()}
               >
                 <RefreshCcw size={17} aria-hidden="true" />
-                선택 학생 재생성
+                중복 의심 학생만 재생성
               </button>
             </div>
           </div>
         </div>
+
+        <details className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+          <summary className="cursor-pointer text-sm font-bold text-slate-700">재생성 고급 옵션</summary>
+          <label className="mt-3 flex items-start gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4"
+              checked={includeFinalizedInRegeneration}
+              onChange={(event) => setIncludeFinalizedInRegeneration(event.target.checked)}
+              disabled={isGenerating}
+            />
+            <span>
+              최종 확정 학생 포함
+              <span className="mt-1 block text-xs font-medium text-slate-500">실패, 중복 의심, 학생별 AI 다시 생성에 적용됩니다.</span>
+            </span>
+          </label>
+        </details>
 
         {duplicateQualityStudents.length > 0 ? (
           <div className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800">
@@ -1525,9 +1584,10 @@ export function BulkSubjectCommentComposer() {
               const qualityMeta = getDraftSimilarityStatusMeta(input.quality?.status);
               const qualityPercentage = input.quality ? `${input.quality.percentage}%` : "-";
               const isDuplicateQuality = input.quality?.status === "duplicate" && hasDraft;
-              const qualityChecked = isDuplicateQuality && qualitySelectedStudentIdSet.has(student.id);
+              const qualitySelectable = isDuplicateQuality && (includeFinalizedInRegeneration || input.lifecycleStatus !== "finalized");
+              const qualityChecked = qualitySelectable && qualitySelectedStudentIdSet.has(student.id);
               const canRegenerate =
-                input.lifecycleStatus !== "finalized" &&
+                (includeFinalizedInRegeneration || input.lifecycleStatus !== "finalized") &&
                 !isGenerating &&
                 !input.isRegenerating &&
                 !["queued", "generating"].includes(input.status) &&
@@ -1567,7 +1627,7 @@ export function BulkSubjectCommentComposer() {
                         className="h-4 w-4"
                         checked={qualityChecked}
                         onChange={() => toggleQualitySelection(student.id)}
-                        disabled={!isDuplicateQuality || isGenerating || input.lifecycleStatus === "finalized"}
+                        disabled={!qualitySelectable || isGenerating}
                       />
                       중복 의심 선택
                     </label>
