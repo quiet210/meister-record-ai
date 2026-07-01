@@ -47,6 +47,16 @@ const minDraftChars = 250;
 const maxDraftChars = 700;
 const maxCurriculumPromptStandards = 3;
 
+function optionalTextLine(label: string, value?: string) {
+  const trimmed = value?.trim();
+  return trimmed ? `${label}: ${trimmed}` : "";
+}
+
+function optionalListLine(label: string, values: string[]) {
+  const selectedValues = values.map((value) => value.trim()).filter(Boolean);
+  return selectedValues.length > 0 ? `${label}: ${selectedValues.join(", ")}` : "";
+}
+
 function buildSystemInstruction() {
   return [
     "당신은 대한민국 공업계 고등학교 교사의 학생부 작성 보조자다.",
@@ -59,7 +69,7 @@ function buildSystemInstruction() {
     "제목, 목록, 해설, 근거 설명, 따옴표, 마크다운을 출력하지 않는다.",
     "초안은 반드시 250자 이상 700자 이하의 한 문단으로 작성한다.",
     "모든 문장은 완결된 문장이어야 하며, 마지막 글자는 반드시 마침표(.)여야 한다.",
-    "근거가 부족하면 초안을 만들지 말고 정확히 '근거 부족: 관찰 메모를 더 구체적으로 입력하세요.'라고만 출력한다."
+    "근거가 부족하면 초안을 만들지 말고 정확히 '근거 부족: 입력 근거를 더 구체적으로 입력하세요.'라고만 출력한다."
   ].join("\n");
 }
 
@@ -114,7 +124,7 @@ function buildCurriculumStandardsSection(standards: CurriculumPromptStandard[] =
     "다음은 해당 과목의 성취기준이다.",
     "반드시 아래 내용을 참고하여",
     "학생의 활동을 해당 과목의 특성에 맞게 작성하라.",
-    "단, 성취기준 문장을 그대로 복사하거나 나열하지 말고 교사 관찰 메모의 실제 활동과 연결해 자연스럽게 반영하라.",
+    "단, 성취기준 문장을 그대로 복사하거나 나열하지 말고 교사 입력 근거의 실제 활동과 연결해 자연스럽게 반영하라.",
     "",
     ...standardBlocks
   ].join("\n");
@@ -141,14 +151,14 @@ function buildSubjectPrompt(payload: Extract<RecordFormPayload, { mode: "subject
     `학년: ${payload.grade}`,
     `학과: ${payload.department}`,
     `과목명: ${payload.subjectName}`,
-    `교과서: ${payload.textbook || "입력 없음"}`,
-    `단원: ${payload.unit || "입력 없음"}`,
+    optionalTextLine("교과서", payload.textbook),
+    optionalTextLine("단원", payload.unit),
     payload.lengthOption ? `분량: ${payload.lengthOption}` : "",
     payload.writingStyle ? `문체: ${payload.writingStyle}` : "",
-    `활동 유형: ${payload.activityTypes.join(", ") || "입력 없음"}`,
-    `역량: ${payload.competencies.join(", ") || "입력 없음"}`,
-    `보완점: ${payload.improvements.join(", ") || "입력 없음"}`,
-    `교사 관찰 메모: ${payload.observationMemo}`
+    optionalListLine("활동 유형", payload.activityTypes),
+    optionalListLine("역량", payload.competencies),
+    optionalListLine("보완점", payload.improvements),
+    optionalTextLine("교사 관찰 메모", payload.observationMemo)
   ].filter(Boolean);
 
   const curriculumStandardsSection = buildCurriculumStandardsSection(options?.curriculumStandards);
@@ -168,8 +178,10 @@ function buildBehaviorPrompt(payload: Extract<RecordFormPayload, { mode: "behavi
     "행동특성 및 종합의견 초안을 작성하라.",
     "특정 교과 세부활동, 교과서, 단원, 평가 루브릭 중심 표현은 넣지 않는다.",
     "학생의 학교생활 전반, 학급생활, 교우관계, 책임감, 성실성, 진로태도, 공업계 학생으로서의 안전의식과 직업윤리를 중심으로 작성한다.",
-    "담임 관찰 메모와 선택된 생활 영역 안에서 확인 가능한 내용만 사용한다.",
+    "담임 관찰 메모와 선택 또는 입력된 항목 안에서 확인 가능한 내용만 사용한다.",
     lengthInstruction(payload),
+    payload.writingStyle ? `문체는 '${payload.writingStyle}'에 맞추되, 학생부 공식 문체의 절제와 객관성을 유지한다.` : "",
+    payload.writingPerspective ? `작성 관점은 '${payload.writingPerspective}'에 맞추되, 입력 근거 밖의 내용은 추가하지 않는다.` : "",
     "아래 입력 근거에 없는 활동, 성취, 태도, 평가 결과는 절대 추가하지 않는다.",
     "보완할 점은 낙인 표현이 아니라 지도와 개선 가능성 중심으로 절제하여 표현한다.",
     "",
@@ -185,12 +197,14 @@ function buildBehaviorPrompt(payload: Extract<RecordFormPayload, { mode: "behavi
     `학생: ${payload.studentName || "입력 없음"}`,
     `학년: ${payload.grade}`,
     `학급: ${payload.className}`,
-    `학교생활 영역: ${payload.schoolLifeAreas.join(", ") || "입력 없음"}`,
-    `공업계 특화 생활태도: ${payload.industrialAttitudes.join(", ") || "입력 없음"}`,
-    `보완할 점: ${payload.behaviorImprovements.join(", ") || "입력 없음"}`,
-    `담임 관찰 메모: ${payload.homeroomMemo}`,
+    optionalListLine("학교생활 영역", payload.schoolLifeAreas),
+    optionalListLine("공업계 특화 생활태도", payload.industrialAttitudes),
+    optionalListLine("보완할 점", payload.behaviorImprovements),
+    payload.writingStyle ? `문체: ${payload.writingStyle}` : "",
+    payload.writingPerspective ? `작성 관점: ${payload.writingPerspective}` : "",
+    optionalTextLine("담임 관찰 메모", payload.homeroomMemo),
     retryInstruction ? `\n${retryInstruction}` : ""
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function buildPrompt(payload: RecordFormPayload, retryInstruction?: string, options?: GeminiPromptOptions) {
@@ -492,7 +506,7 @@ export async function generateStudentRecordDraftWithGemini(
           ? `Gemini API 호출 실패: ${failedModels} 모델에서 초안을 생성하지 못했습니다.`
           : `Gemini 응답 검증 실패: ${failedModels} 모델에서 완결된 초안을 생성하지 못했습니다.`,
         result.failureType === "api" && result.status ? `상태 코드 ${result.status}: ${result.message}` : result.message,
-        "잠시 후 다시 시도하거나 관찰 메모를 더 구체적으로 입력해 주세요."
+        "잠시 후 다시 시도하거나 입력 근거를 더 구체적으로 입력해 주세요."
       ]
     };
   }

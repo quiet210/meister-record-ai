@@ -264,30 +264,39 @@ export async function uploadKnowledgeDocument(input: UploadKnowledgeInput) {
 }
 
 function buildSearchQuery(payload: RecordFormPayload) {
+  const optionalTextLine = (label: string, value?: string) => {
+    const trimmed = value?.trim();
+    return trimmed ? `${label}: ${trimmed}` : "";
+  };
+  const optionalListLine = (label: string, values: string[]) => {
+    const selectedValues = values.map((value) => value.trim()).filter(Boolean);
+    return selectedValues.length > 0 ? `${label}: ${selectedValues.join(", ")}` : "";
+  };
+
   if (payload.mode === "behavior") {
     return [
       "공업계 고등학교 행동특성 및 종합의견 작성 근거 문서 검색",
       `학년: ${payload.grade}`,
       `학급: ${payload.className}`,
-      `학교생활 영역: ${payload.schoolLifeAreas.join(", ")}`,
-      `공업계 특화 생활태도: ${payload.industrialAttitudes.join(", ")}`,
-      `보완할 점: ${payload.behaviorImprovements.join(", ")}`,
-      `담임 관찰 메모: ${payload.homeroomMemo}`,
+      optionalListLine("학교생활 영역", payload.schoolLifeAreas),
+      optionalListLine("공업계 특화 생활태도", payload.industrialAttitudes),
+      optionalListLine("보완할 점", payload.behaviorImprovements),
+      optionalTextLine("담임 관찰 메모", payload.homeroomMemo),
       "학교생활 전반, 안전의식, 직업윤리, 진로태도와 관련된 근거를 찾는다."
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   return [
     "공업계 고등학교 학생부 작성 근거 문서 검색",
     `과목: ${payload.subjectName}`,
-    `교과서: ${payload.textbook || ""}`,
-    `단원: ${payload.unit || ""}`,
-    `활동 유형: ${payload.activityTypes.join(", ")}`,
-    `역량: ${payload.competencies.join(", ")}`,
-    `보완점: ${payload.improvements.join(", ")}`,
-    `교사 관찰 메모: ${payload.observationMemo}`,
+    optionalTextLine("교과서", payload.textbook),
+    optionalTextLine("단원", payload.unit),
+    optionalListLine("활동 유형", payload.activityTypes),
+    optionalListLine("역량", payload.competencies),
+    optionalListLine("보완점", payload.improvements),
+    optionalTextLine("교사 관찰 메모", payload.observationMemo),
     "교과서 학습목표, 학과별 교육과정, NCS 능력단위, 평가 루브릭과 관련된 근거를 찾는다."
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function buildFilter(payload: RecordFormPayload) {

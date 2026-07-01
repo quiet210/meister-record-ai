@@ -2,15 +2,25 @@ import type { CommentMode, GenerateResponse, RecordFormPayload } from "@/lib/typ
 import { formatRagContext, searchKnowledgeDocuments } from "@/lib/rag";
 import { collectEvidence, inspectDraft, validatePayload } from "@/lib/guardrails";
 
+function optionalTextLine(label: string, value?: string) {
+  const trimmed = value?.trim();
+  return trimmed ? `${label}: ${trimmed}` : "";
+}
+
+function optionalListLine(label: string, values: string[]) {
+  const selectedValues = values.map((value) => value.trim()).filter(Boolean);
+  return selectedValues.length > 0 ? `${label}: ${selectedValues.join(", ")}` : "";
+}
+
 function buildSystemPrompt() {
   return [
     "당신은 대한민국 공업계 고등학교 교사의 학생부 작성 보조자다.",
     "입력된 관찰 근거 안에서만 작성한다.",
     "교과/교육과정/NCS/루브릭 근거는 검색된 문서 내용에서만 사용한다.",
-    "학생의 실제 활동과 태도는 교사 관찰 메모에 있는 내용만 사용한다.",
+    "학생의 실제 활동과 태도는 교사 관찰 메모와 선택 또는 입력된 항목에 있는 내용만 사용한다.",
     "없는 사실, 수상, 자격증, 외부활동, 성격 단정, 미래 예측을 생성하지 않는다.",
     "과장 표현을 피하고 실제 관찰 중심으로 학생부 문체를 사용한다.",
-    "검색 문서 또는 교사 관찰 메모가 부족하면 문장을 생성하지 말고 근거 부족을 알린다."
+    "검색 문서 또는 입력 근거가 부족하면 문장을 생성하지 말고 근거 부족을 알린다."
   ].join("\n");
 }
 
@@ -31,11 +41,11 @@ function buildUserPrompt(payload: RecordFormPayload, ragContext: string) {
       "[입력 근거]",
       `학년: ${payload.grade}`,
       `학급: ${payload.className}`,
-      `학교생활 영역: ${payload.schoolLifeAreas.join(", ") || "입력 없음"}`,
-      `공업계 특화 생활태도: ${payload.industrialAttitudes.join(", ") || "입력 없음"}`,
-      `보완할 점: ${payload.behaviorImprovements.join(", ") || "입력 없음"}`,
-      `담임 관찰 메모: ${payload.homeroomMemo}`
-    ].join("\n");
+      optionalListLine("학교생활 영역", payload.schoolLifeAreas),
+      optionalListLine("공업계 특화 생활태도", payload.industrialAttitudes),
+      optionalListLine("보완할 점", payload.behaviorImprovements),
+      optionalTextLine("담임 관찰 메모", payload.homeroomMemo)
+    ].filter(Boolean).join("\n");
   }
 
   return [
@@ -53,13 +63,13 @@ function buildUserPrompt(payload: RecordFormPayload, ragContext: string) {
     `학년: ${payload.grade}`,
     `학과: ${payload.department}`,
     `과목명: ${payload.subjectName}`,
-    `교과서: ${payload.textbook || "입력 없음"}`,
-    `단원: ${payload.unit || "입력 없음"}`,
-    `활동 유형: ${payload.activityTypes.join(", ") || "입력 없음"}`,
-    `역량: ${payload.competencies.join(", ") || "입력 없음"}`,
-    `보완점: ${payload.improvements.join(", ") || "입력 없음"}`,
-    `교사 관찰 메모: ${payload.observationMemo}`
-  ].join("\n");
+    optionalTextLine("교과서", payload.textbook),
+    optionalTextLine("단원", payload.unit),
+    optionalListLine("활동 유형", payload.activityTypes),
+    optionalListLine("역량", payload.competencies),
+    optionalListLine("보완점", payload.improvements),
+    optionalTextLine("교사 관찰 메모", payload.observationMemo)
+  ].filter(Boolean).join("\n");
 }
 
 export async function generateStudentRecordDraft(payload: RecordFormPayload): Promise<GenerateResponse> {
