@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpenText, ClipboardList, Database, ListChecks, PenLine, UsersRound } from "lucide-react";
+import { BookOpenText, ClipboardList, Database, FileText, ListChecks, PenLine, UsersRound } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 
 const actions = [
@@ -28,6 +28,12 @@ const actions = [
     icon: ClipboardList
   },
   {
+    href: "/student-records",
+    title: "학생부 관리",
+    description: "학생별 과세특과 행특의 AI 원본, 수정본, 최종본, 생성 이력을 한 화면에서 확인합니다.",
+    icon: FileText
+  },
+  {
     href: "/knowledge",
     title: "문서 업로드",
     description: "교과서 학습목표, 교육과정, NCS, 루브릭 파일을 RAG 근거로 등록합니다.",
@@ -50,7 +56,7 @@ const actions = [
 export default function DashboardPage() {
   return (
     <AppShell>
-      <div className="space-y-5">
+      <div className="min-w-0 space-y-5">
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -93,8 +99,8 @@ export default function DashboardPage() {
           </div>
           <div className="panel p-4">
             <p className="text-sm font-semibold text-slate-500">지원 화면</p>
-            <p className="mt-2 text-2xl font-bold text-slate-950">8개</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">대시보드, 세특, 일괄 세특, 행동특성, 일괄 행특, 문서, 과목/성취기준, 학생 관리를 제공합니다.</p>
+            <p className="mt-2 text-2xl font-bold text-slate-950">9개</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">대시보드, 세특, 일괄 세특, 행동특성, 일괄 행특, 학생부 관리, 문서, 과목/성취기준, 학생 관리를 제공합니다.</p>
           </div>
           <div className="panel p-4">
             <p className="text-sm font-semibold text-slate-500">앱 형태</p>
