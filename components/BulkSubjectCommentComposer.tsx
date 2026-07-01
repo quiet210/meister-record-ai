@@ -119,18 +119,15 @@ function sortClassNames(values: string[]) {
 }
 
 function getStudentWarnings(input: StudentSubjectInput) {
-  const warnings: string[] = [];
+  return hasSubjectGenerationInput(input) ? [] : ["교사 관찰 메모, 활동유형, 역량키워드, 보완점 중 하나 이상"];
+}
 
-  if (input.activityTypes.length === 0) warnings.push("활동유형");
-  if (input.competencies.length === 0) warnings.push("역량");
-  if (input.improvements.length === 0) warnings.push("보완점");
-  if (input.observationMemo.trim().length < 10) warnings.push("관찰 메모 10자 이상");
-
-  return warnings;
+function hasSubjectGenerationInput(input: StudentSubjectInput) {
+  return input.observationMemo.trim().length > 0 || input.activityTypes.length > 0 || input.competencies.length > 0 || input.improvements.length > 0;
 }
 
 function isStudentReady(input: StudentSubjectInput) {
-  return input.activityTypes.length > 0 && input.competencies.length > 0 && input.observationMemo.trim().length >= 10;
+  return hasSubjectGenerationInput(input);
 }
 
 async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
@@ -603,11 +600,11 @@ export function BulkSubjectCommentComposer() {
     const generatedDrafts: DraftSimilarityInput[] = [];
 
     if (runnableStudents.length === 0) {
-      setMessage("생성 가능한 학생이 없습니다. 활동유형, 역량, 관찰 메모를 확인하세요.");
+      setMessage("생성 가능한 학생이 없습니다. 교사 관찰 메모, 활동유형, 역량키워드, 보완점 중 하나 이상 입력하세요.");
       return;
     }
 
-    setMessage(skippedCount > 0 ? `입력이 부족한 ${skippedCount}명은 대기 상태로 남기고 생성합니다.` : "");
+    setMessage(skippedCount > 0 ? `생성 근거가 없는 ${skippedCount}명은 대기 상태로 남기고 생성합니다.` : "");
     setStudentInputs((current) => {
       const next = { ...current };
       runnableStudents.forEach((student) => {
@@ -1390,7 +1387,7 @@ export function BulkSubjectCommentComposer() {
                       {warnings.length > 0 ? (
                         <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold leading-5 text-amber-900">
                           <AlertTriangle className="mr-1 inline" size={13} aria-hidden="true" />
-                          빈 값: {warnings.join(", ")}
+                          필요: {warnings.join(", ")}
                         </div>
                       ) : (
                         <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs font-semibold text-emerald-700">

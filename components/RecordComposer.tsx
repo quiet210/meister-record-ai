@@ -492,10 +492,14 @@ export function RecordComposer({ mode }: RecordComposerProps) {
 
   const activeMemo = mode === "subject" ? observationMemo : homeroomMemo;
   const memoLength = activeMemo.trim().length;
+  const hasSubjectGenerationInput =
+    observationMemo.trim().length > 0 || activityTypes.length > 0 || competencies.length > 0 || improvements.length > 0;
+  const hasBehaviorGenerationInput =
+    homeroomMemo.trim().length > 0 || schoolLifeAreas.length > 0 || industrialAttitudes.length > 0 || behaviorImprovements.length > 0;
   const canGenerate =
     mode === "subject"
-      ? memoLength >= 10 && subjectName.trim().length > 0 && activityTypes.length > 0
-      : memoLength >= 10 && className.trim().length > 0 && schoolLifeAreas.length > 0 && industrialAttitudes.length > 0;
+      ? subjectName.trim().length > 0 && hasSubjectGenerationInput
+      : className.trim().length > 0 && hasBehaviorGenerationInput;
   const viewSettingsOptions = settingsOptions || fallbackSettingsOptions;
 
   useEffect(() => {

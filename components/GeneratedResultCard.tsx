@@ -57,7 +57,7 @@ export function GeneratedResultCard({
 }: GeneratedResultCardProps) {
   const isMobile = variant === "mobile";
   const description =
-    mode === "subject" ? "검색 문서와 관찰 메모 안에서만 초안을 만듭니다." : "담임 관찰 메모와 선택한 생활 영역 안에서만 초안을 만듭니다.";
+    mode === "subject" ? "검색 문서와 입력 근거 안에서만 초안을 만듭니다." : "담임 관찰 메모와 선택 또는 입력한 근거 안에서만 초안을 만듭니다.";
   const statusMeta = getRecordDraftLifecycleStatusMeta(lifecycleStatus);
   const effectiveContent = getEffectiveRecordContent({
     finalContent,

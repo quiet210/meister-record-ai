@@ -31,7 +31,7 @@ export function MobileRecordStepper(props: RecordComposerViewProps) {
     }
 
     if (currentStep === 1) {
-      return mode === "subject" ? props.activityTypes.length > 0 : props.schoolLifeAreas.length > 0 && props.industrialAttitudes.length > 0;
+      return true;
     }
 
     if (currentStep === 2) {
@@ -308,7 +308,7 @@ function MemoStep(props: RecordComposerViewProps) {
             }
           }}
         />
-        <span className="field-help">현재 {props.memoLength}자 · 10자 이상 입력하면 생성할 수 있습니다.</span>
+        <span className="field-help">현재 {props.memoLength}자 · 메모 또는 선택 항목이 하나 이상 있으면 생성할 수 있습니다.</span>
       </label>
     </section>
   );

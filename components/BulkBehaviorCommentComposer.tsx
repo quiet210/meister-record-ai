@@ -141,19 +141,20 @@ function getGroupOptions(settingsOptions: SettingsOptions, key: ChecklistCategor
 }
 
 function getStudentWarnings(input: StudentBehaviorInput) {
-  const warnings: string[] = [];
-  const industrialAttitudes = getSelectedIndustrialAttitudes(input);
-
-  if (input.schoolLifeAreas.length === 0) warnings.push("학교생활 영역");
-  if (industrialAttitudes.length === 0) warnings.push("생활태도/협업/책임감 키워드");
-  if (input.behaviorImprovements.length === 0) warnings.push("보완점");
-  if (input.homeroomMemo.trim().length < 10) warnings.push("담임 메모 10자 이상");
-
-  return warnings;
+  return hasBehaviorGenerationInput(input) ? [] : ["담임 관찰 메모, 학교생활 영역, 생활태도/협업/책임감 키워드, 보완점 중 하나 이상"];
 }
 
 function isStudentReady(input: StudentBehaviorInput) {
-  return input.schoolLifeAreas.length > 0 && getSelectedIndustrialAttitudes(input).length > 0 && input.homeroomMemo.trim().length >= 10;
+  return hasBehaviorGenerationInput(input);
+}
+
+function hasBehaviorGenerationInput(input: StudentBehaviorInput) {
+  return (
+    input.homeroomMemo.trim().length > 0 ||
+    input.schoolLifeAreas.length > 0 ||
+    getSelectedIndustrialAttitudes(input).length > 0 ||
+    input.behaviorImprovements.length > 0
+  );
 }
 
 function getSelectedIndustrialAttitudes(input: StudentBehaviorInput) {
@@ -640,11 +641,11 @@ export function BulkBehaviorCommentComposer() {
     const generatedDrafts: DraftSimilarityInput[] = [];
 
     if (runnableStudents.length === 0) {
-      setMessage("생성 가능한 학생이 없습니다. 학교생활 영역, 키워드, 담임 메모를 확인하세요.");
+      setMessage("생성 가능한 학생이 없습니다. 담임 관찰 메모, 학교생활 영역, 생활태도/협업/책임감 키워드, 보완점 중 하나 이상 입력하세요.");
       return;
     }
 
-    setMessage(skippedCount > 0 ? `입력이 부족한 ${skippedCount}명은 대기 상태로 남기고 생성합니다.` : "");
+    setMessage(skippedCount > 0 ? `생성 근거가 없는 ${skippedCount}명은 대기 상태로 남기고 생성합니다.` : "");
     setStudentInputs((current) => {
       const next = { ...current };
       runnableStudents.forEach((student) => {
@@ -1434,7 +1435,7 @@ export function BulkBehaviorCommentComposer() {
                       {warnings.length > 0 ? (
                         <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold leading-5 text-amber-900">
                           <AlertTriangle className="mr-1 inline" size={13} aria-hidden="true" />
-                          확인: {warnings.join(", ")}
+                          필요: {warnings.join(", ")}
                         </div>
                       ) : (
                         <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs font-semibold text-emerald-700">
