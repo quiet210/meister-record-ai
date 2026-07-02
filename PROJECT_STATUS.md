@@ -123,10 +123,19 @@
 
 - Student Record Center
   - `/student-records` 화면 구현
-  - 학생별 과세특/행특 최신본 조회
+  - 현재 로그인한 교사의 학생별 과세특/행특 최신본 조회
   - AI 원본/수정본/최종본 탭
   - 생성 이력 timeline
   - 복사, 재생성, 최종 확정, 최종 해제 액션 연결
+
+- 보안 및 RLS
+  - `record_drafts` 조회/수정/삽입 정책을 `user_id = auth.uid()` 기준으로 강화
+  - 같은 학교 관리자도 기본 정책으로 다른 교사의 학생부 draft를 조회하지 않도록 제한
+  - `users` 정책을 본인 프로필 조회, 본인 teacher 프로필 생성, 같은 학교 관리자 조회/role 수정으로 정리
+  - 학생, 과목, 성취기준, 학교 설정은 같은 학교 공유 데이터로 유지
+  - 과세특 생성 API가 클라이언트 `schoolId` 대신 로그인 토큰으로 확인한 학교 ID만 사용하도록 보강
+  - 선택 학생이 현재 학교 소속이 아니면 생성 API에서 거부
+  - 단일/일괄 생성과 Student Record Center 재생성 요청에 Supabase access token 전달 적용
 
 - 엑셀 다운로드
   - 과세특 일괄 생성 결과 다운로드 구현
@@ -182,11 +191,12 @@
 | AI | 94% | Gemini 생성과 학습모듈 기반 성취기준 반영 완료, RAG 고도화 필요 |
 | 학생 관리 | 98% | CRUD, 업로드, 템플릿 완료 |
 | 관리자 | 96% | 학과, 과목/성취기준, 체크리스트 관리 완료 |
-| Lifecycle | 98% | AI 원본, 수정본, 최종본 흐름 완료 |
+| Lifecycle | 99% | AI 원본, 수정본, 최종본 흐름 완료, 교사 소유 RLS 강화 |
+| 보안/RLS | 96% | 학생부 개인 소유 정책과 학교 공유 데이터 경계 적용 |
 | 성능 | 84% | 동시 호출 제한 완료, 대량 데이터 최적화 필요 |
-| 문서 | 92% | README/PROJECT_STATUS 최신화, 운영 문서 추가 여지 있음 |
+| 문서 | 94% | README/PROJECT_STATUS 최신화, 운영 문서 추가 여지 있음 |
 
-전체 진행률: 95%
+전체 진행률: 96%
 
 ## 변경 이력
 
@@ -238,3 +248,8 @@
   - 과세특 단일/일괄 생성 화면에 NCS교과 학습모듈 선택, 단원 후보, 성취기준 미리보기 추가
   - 일반교과는 학습모듈 UI를 비활성화하고 기존 과목명 기준 성취기준 조회 유지
   - 과세특 생성 API에서 `learningModule` 전달 시 `subject_name + learning_module` 우선 조회 후 과목 기준 fallback 적용
+  - `20260702_secure_record_drafts_rls.sql` migration 추가
+  - `record_drafts` select/insert/update RLS를 현재 로그인 교사 `user_id` 기준으로 강화
+  - `users` RLS를 본인 프로필, 같은 학교 관리자 사용자/role 관리 범위로 정리
+  - 생성 API 요청에 access token을 전달하고 서버에서 학교 ID와 선택 학생 소속을 검증하도록 보강
+  - README.md와 PROJECT_STATUS.md에 학교 공유 데이터, 교사 개인 데이터, 관리자 권한, 보안 변경사항 반영

@@ -44,6 +44,7 @@
 - 회원가입 시 사용자 이름과 학교 ID 저장
 - `public.users` 프로필과 Supabase Auth 사용자 연결
 - `admin`, `teacher` role 기반 권한 분리
+- 일반 사용자는 본인 프로필만 조회하고, 관리자는 같은 학교 사용자 프로필과 role만 관리
 
 ### 학생 관리
 
@@ -52,7 +53,7 @@
 - 학년, 학과, 반, 번호, 이름 관리
 - 학생 엑셀 업로드
 - 학생 업로드 템플릿 다운로드
-- 학교 ID 기준 학생 데이터 분리
+- 학교 ID 기준 학생 데이터 분리 및 같은 학교 교사 간 공유
 
 ### 과목 관리
 
@@ -78,6 +79,7 @@
 
 - 학생 선택 후 과목, 학습모듈, 단원, 활동유형, 역량키워드, 보완점, 교사 관찰 메모를 입력해 과세특 초안 생성
 - 과목 선택 시 `curriculum_subjects.subject_type`을 함께 확인해 일반교과(`general`)와 NCS교과(`ncs`)를 판정
+- 생성 API는 로그인 토큰으로 서버에서 확인한 학교 ID만 사용해 성취기준을 조회
 - 일반교과는 학습모듈 선택 UI를 비활성화하고 “일반교과는 학습모듈을 사용하지 않습니다.” 안내 표시
 - NCS교과는 선택 과목의 active `curriculum_standards.learning_module` 목록을 불러오며, 중복 학습모듈명과 빈 값은 제외
 - 학습모듈 선택 시 해당 모듈의 단원명 후보를 제공하고, 단원명이 하나면 단원 입력칸에 자동 입력
@@ -116,6 +118,7 @@
 ### 학생부 관리
 
 - `/student-records`에서 학생별 과세특/행특 최신본과 생성 이력 확인
+- 현재 로그인한 교사의 `record_drafts.user_id`에 해당하는 학생부만 조회
 - 좌측 학생 목록 검색과 필터
 - 우측 학생별 카드형 상세
 - 과세특/행특 각각 AI 원본, 수정본, 최종본 탭 제공
@@ -125,6 +128,7 @@
 ### Lifecycle
 
 - `record_drafts` 중심 lifecycle 적용
+- `record_drafts.user_id`를 교사 소유자 기준으로 사용하며 조회, 수정, 최종 확정은 항상 현재 로그인 사용자로 제한
 - `ai_content`: AI 원본
 - `edited_content`: 교사 수정본
 - `final_content`: 최종본
@@ -213,6 +217,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `student-records.ts`: 학생별 학생부 조회
 - `students.ts`: 학생 CRUD와 프로필 보조 로직
 - `admin-settings.ts`: 관리자 설정 로딩과 fallback 구성
+- `generate-api-client.ts`, `generate-api-auth.ts`: 생성 API 로그인 토큰 전달과 서버 측 학교/학생 소속 검증
 - `export-results.ts`: 과세특/행특 엑셀 다운로드
 - `student-template.ts`, `curriculum-template.ts`: 엑셀 템플릿 생성
 - `supabase.ts`, `supabase-server.ts`: Supabase 클라이언트
@@ -230,6 +235,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `migrations/20260629_record_draft_quality_updates.sql`: 생성 품질 관리 보강
 - `migrations/20260630_record_draft_lifecycle.sql`: 학생부 lifecycle 확장
 - `migrations/20260702_curriculum_learning_module.sql`: 성취기준 학습모듈 컬럼과 중복 기준 확장
+- `migrations/20260702_secure_record_drafts_rls.sql`: 학생부 개인 소유 RLS, 사용자 관리 RLS, 생성 API 우회 방지 보강
 
 ## 4. 주요 화면
 
@@ -351,7 +357,33 @@ AI 원본
 - 복사와 엑셀 다운로드에서 가장 우선 사용합니다.
 - 필요하면 최종 해제로 다시 수정 상태로 돌릴 수 있습니다.
 
-## 7. 현재 기술 스택
+## 7. 보안 및 RLS 권한 구조
+
+### 학교 공유 데이터
+
+- `students`: 같은 학교 사용자만 조회, 추가, 수정, 삭제할 수 있습니다.
+- `curriculum_subjects`, `curriculum_standards`: 같은 학교에서 공유하며, 과목 관리는 관리자 중심, 성취기준 업로드/수정은 기존 관리자/업로더 흐름을 유지합니다.
+- `departments`, `checklist_categories`, `checklist_items`: 같은 학교에서 조회하고 관리자는 같은 학교 설정만 수정합니다.
+
+### 교사 개인 데이터
+
+- `record_drafts`의 AI 원본, 수정본, 최종본, 생성 이력은 `user_id = auth.uid()` 기준으로만 조회/수정합니다.
+- 같은 학교 관리자라도 기본 RLS 정책으로 다른 교사의 `record_drafts`를 조회하지 않습니다.
+- Bulk 생성과 Student Record Center도 `school_id + user_id` 필터로 현재 로그인 교사의 draft만 저장, 수정, 조회합니다.
+
+### 관리자 권한
+
+- 관리자는 같은 학교의 사용자 프로필을 조회하고 role을 수정할 수 있습니다.
+- 관리자는 학교 설정, 과목, 성취기준, 체크리스트를 같은 학교 범위에서 관리합니다.
+- 관리자 권한은 학생부 원문 조회 권한으로 확장되지 않습니다.
+
+### 학교 경계
+
+- 사용자의 `public.users.school_id`와 행의 `school_id`가 다르면 학생, 과목, 성취기준, 학교 설정, 학생부 draft에 접근할 수 없습니다.
+- 과세특 생성 API는 클라이언트가 보낸 `schoolId`를 신뢰하지 않고, 로그인 토큰으로 조회한 서버 측 학교 ID만 사용합니다.
+- 선택 학생 ID가 현재 학교 학생이 아니면 생성 API 요청을 거부합니다.
+
+## 8. 현재 기술 스택
 
 - Next.js 15 App Router
 - React 19
@@ -405,7 +437,7 @@ Production URL: https://meister-record-ai.vercel.app
 GitHub: https://github.com/quiet210/meister-record-ai
 ```
 
-## 8. 향후 계획
+## 9. 향후 계획
 
 현재 우선순위는 다음 순서입니다.
 
