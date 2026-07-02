@@ -13,6 +13,9 @@ export async function POST(request: Request) {
     JSON.stringify(
       {
         selectedSubject: body.subjectName,
+        requestedLearningModule: curriculumResult.requestedLearningModule || body.learningModule || "",
+        usedLearningModule: curriculumResult.usedLearningModule || "",
+        fallbackToSubject: curriculumResult.fallbackToSubject || false,
         totalCandidateCount: curriculumResult.totalCount,
         selectedStandards: curriculumStandards.map((standard) => ({
           learningModule: standard.learningModule,
