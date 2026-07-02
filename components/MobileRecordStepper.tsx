@@ -12,6 +12,7 @@ import type { CommentLength, Department } from "@/lib/types";
 import type { RecordComposerViewProps } from "@/components/RecordComposer";
 import { GeneratedResultCard } from "@/components/GeneratedResultCard";
 import { SelectableChipGroup } from "@/components/SelectableChipGroup";
+import { SubjectSelect } from "@/components/SubjectSelect";
 import { SubjectLearningModuleControls } from "@/components/SubjectLearningModuleControls";
 
 const steps = ["기본정보", "활동/생활 영역 선택", "교사 메모", "결과"] as const;
@@ -196,18 +197,7 @@ function BasicInfoStep(props: RecordComposerViewProps) {
           </label>
           <label className="space-y-2">
             <span className="field-label">과목명</span>
-            <input
-              className="input-base"
-              list="subject-options-mobile"
-              placeholder="예: PLC제어"
-              value={props.subjectName}
-              onChange={(event) => props.setSubjectName(event.target.value)}
-            />
-            <datalist id="subject-options-mobile">
-              {props.settingsOptions.subjectOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
+            <SubjectSelect value={props.subjectName} options={props.settingsOptions.subjectOptions} onChange={props.setSubjectName} />
             <span className="field-help">교과유형: {props.subjectTypeLabel}</span>
           </label>
           <label className="space-y-2">

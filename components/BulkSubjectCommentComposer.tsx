@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw,
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
 import { downloadSubjectCommentResults, type SubjectCommentResultExportRow } from "@/lib/export-results";
+import { postGenerateApi } from "@/lib/generate-api-client";
 import { gradeOptions } from "@/lib/options";
 import {
   finalizeRecordDraft,
@@ -17,6 +18,7 @@ import {
 import { ensureUserProfile, listStudents } from "@/lib/students";
 import type { CommentLength, GenerateResponse, RecordDraftLifecycleStatus, Student, SubjectRecordFormPayload } from "@/lib/types";
 import { BulkDraftLifecycleEditor } from "@/components/BulkDraftLifecycleEditor";
+import { SubjectSelect } from "@/components/SubjectSelect";
 import { SubjectLearningModuleControls } from "@/components/SubjectLearningModuleControls";
 import { useSubjectLearningModule } from "@/components/useSubjectLearningModule";
 
@@ -268,14 +270,10 @@ export function BulkSubjectCommentComposer() {
   const qualitySelectedStudentIdSet = useMemo(() => new Set(qualitySelectedStudentIds), [qualitySelectedStudentIds]);
 
   const classOptions = useMemo(() => {
-    const classes = students
-      .filter((student) => !gradeFilter || student.grade === gradeFilter)
-      .filter((student) => !departmentFilter || student.department === departmentFilter)
-      .map((student) => student.className)
-      .filter(Boolean);
+    const classes = students.map((student) => student.className).filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [departmentFilter, gradeFilter, students]);
+  }, [students]);
 
   const filteredStudents = useMemo(
     () =>
@@ -685,13 +683,7 @@ export function BulkSubjectCommentComposer() {
       patchStudentInput(student.id, { status: "generating", error: "", savedMessage: "" }, false);
 
       try {
-        const response = await fetch("/api/generate/subject-comment", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
-        });
+        const response = await postGenerateApi("/api/generate/subject-comment", payload);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -1011,13 +1003,7 @@ export function BulkSubjectCommentComposer() {
       const payload = buildPayload(student, input);
 
       try {
-        const response = await fetch("/api/generate/subject-comment", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
-        });
+        const response = await postGenerateApi("/api/generate/subject-comment", payload);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -1236,19 +1222,7 @@ export function BulkSubjectCommentComposer() {
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.25fr_1fr]">
           <label className="space-y-2">
             <span className="field-label">과목명</span>
-            <input
-              className="input-base"
-              list="bulk-subject-options"
-              placeholder="예: PLC제어"
-              value={subjectName}
-              onChange={(event) => setSubjectName(event.target.value)}
-              disabled={isGenerating}
-            />
-            <datalist id="bulk-subject-options">
-              {settingsOptions.subjectOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
+            <SubjectSelect value={subjectName} options={settingsOptions.subjectOptions} onChange={setSubjectName} disabled={isGenerating} />
             <span className="field-help">교과유형: {subjectLearningModule.selectedSubjectTypeLabel}</span>
           </label>
 

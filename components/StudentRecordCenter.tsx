@@ -13,6 +13,7 @@ import {
   X
 } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
+import { postGenerateApi } from "@/lib/generate-api-client";
 import {
   finalizeRecordDraft,
   getEffectiveRecordContent,
@@ -168,14 +169,10 @@ export function StudentRecordCenter() {
   const departmentLabel = (value: string) => departmentOptions.find((option) => option.value === value)?.label || value;
 
   const classOptions = useMemo(() => {
-    const classes = students
-      .filter((student) => !gradeFilter || student.grade === gradeFilter)
-      .filter((student) => !departmentFilter || student.department === departmentFilter)
-      .map((student) => student.className)
-      .filter(Boolean);
+    const classes = students.map((student) => student.className).filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [departmentFilter, gradeFilter, students]);
+  }, [students]);
 
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -250,13 +247,7 @@ export function StudentRecordCenter() {
     setCardMessage(key, "");
 
     try {
-      const response = await fetch(modeMeta[mode].endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(draft.inputPayload)
-      });
+      const response = await postGenerateApi(modeMeta[mode].endpoint, draft.inputPayload);
 
       if (!response.ok) {
         const errorText = await response.text();

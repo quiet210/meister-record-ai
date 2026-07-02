@@ -5,6 +5,7 @@ import { FileUp, Loader2, ShieldCheck } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions } from "@/lib/admin-settings";
 import { documentTypeOptions, gradeOptions } from "@/lib/options";
 import type { Department, KnowledgeDocumentType } from "@/lib/types";
+import { SubjectSelect } from "@/components/SubjectSelect";
 
 type UploadResult = {
   ok: boolean;
@@ -141,18 +142,7 @@ export function KnowledgeUpload() {
 
             <label className="space-y-2">
               <span className="field-label">과목</span>
-              <input
-                className="input-base"
-                list="knowledge-subject-options"
-                placeholder="예: PLC제어"
-                value={subjectName}
-                onChange={(event) => setSubjectName(event.target.value)}
-              />
-              <datalist id="knowledge-subject-options">
-                {subjectOptions.map((option) => (
-                  <option key={option} value={option} />
-                ))}
-              </datalist>
+              <SubjectSelect value={subjectName} options={subjectOptions} onChange={setSubjectName} />
             </label>
 
             <label className="space-y-2 sm:col-span-2">

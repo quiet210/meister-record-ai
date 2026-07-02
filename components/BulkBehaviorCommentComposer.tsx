@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw,
 import { getFallbackSettingsOptions, loadSettingsOptions, type ChecklistCategoryKey, type SettingsOptions } from "@/lib/admin-settings";
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
 import { downloadBehaviorCommentResults, type BehaviorCommentResultExportRow } from "@/lib/export-results";
+import { postGenerateApi } from "@/lib/generate-api-client";
 import { behaviorImprovementOptions, gradeOptions } from "@/lib/options";
 import {
   finalizeRecordDraft,
@@ -293,14 +294,10 @@ export function BulkBehaviorCommentComposer() {
   const qualitySelectedStudentIdSet = useMemo(() => new Set(qualitySelectedStudentIds), [qualitySelectedStudentIds]);
 
   const classOptions = useMemo(() => {
-    const classes = students
-      .filter((student) => !gradeFilter || student.grade === gradeFilter)
-      .filter((student) => !departmentFilter || student.department === departmentFilter)
-      .map((student) => student.className)
-      .filter(Boolean);
+    const classes = students.map((student) => student.className).filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [departmentFilter, gradeFilter, students]);
+  }, [students]);
 
   const filteredStudents = useMemo(
     () =>
@@ -735,13 +732,7 @@ export function BulkBehaviorCommentComposer() {
       patchStudentInput(student.id, { status: "generating", error: "", savedMessage: "" }, false);
 
       try {
-        const response = await fetch("/api/generate/behavior-comment", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
-        });
+        const response = await postGenerateApi("/api/generate/behavior-comment", payload);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -1065,13 +1056,7 @@ export function BulkBehaviorCommentComposer() {
       const payload = buildPayload(student, input);
 
       try {
-        const response = await fetch("/api/generate/behavior-comment", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
-        });
+        const response = await postGenerateApi("/api/generate/behavior-comment", payload);
 
         if (!response.ok) {
           const errorText = await response.text();

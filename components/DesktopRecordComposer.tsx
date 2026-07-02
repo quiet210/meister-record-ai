@@ -11,6 +11,7 @@ import type { CommentLength, Department } from "@/lib/types";
 import type { RecordComposerViewProps } from "@/components/RecordComposer";
 import { GeneratedResultCard } from "@/components/GeneratedResultCard";
 import { SelectableChipGroup } from "@/components/SelectableChipGroup";
+import { SubjectSelect } from "@/components/SubjectSelect";
 import { SubjectLearningModuleControls } from "@/components/SubjectLearningModuleControls";
 
 export function DesktopRecordComposer(props: RecordComposerViewProps) {
@@ -82,18 +83,7 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
 
                   <label className="space-y-2">
                     <span className="field-label">과목명</span>
-                    <input
-                      className="input-base"
-                      list="subject-options-desktop"
-                      placeholder="예: PLC제어"
-                      value={props.subjectName}
-                      onChange={(event) => props.setSubjectName(event.target.value)}
-                    />
-                    <datalist id="subject-options-desktop">
-                      {settingsOptions.subjectOptions.map((option) => (
-                        <option key={option} value={option} />
-                      ))}
-                    </datalist>
+                    <SubjectSelect value={props.subjectName} options={settingsOptions.subjectOptions} onChange={props.setSubjectName} />
                     <span className="field-help">교과유형: {props.subjectTypeLabel}</span>
                   </label>
 
