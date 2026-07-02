@@ -158,6 +158,7 @@ function buildSubjectPrompt(payload: Extract<RecordFormPayload, { mode: "subject
     `학년: ${payload.grade}`,
     `학과: ${payload.department}`,
     `과목명: ${payload.subjectName}`,
+    payload.learningModule ? `[학습모듈]\n${payload.learningModule.trim()}` : "",
     optionalTextLine("교과서", payload.textbook),
     optionalTextLine("단원", payload.unit),
     payload.lengthOption ? `분량: ${payload.lengthOption}` : "",

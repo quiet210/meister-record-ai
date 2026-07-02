@@ -74,6 +74,7 @@ export function collectEvidence(payload: RecordFormPayload) {
     `학생: ${payload.studentName || "입력 없음"}`,
     `학년: ${payload.grade}`,
     `과목명: ${payload.subjectName}`,
+    optionalTextEvidence("학습모듈", payload.learningModule),
     optionalTextEvidence("교과서", payload.textbook),
     optionalTextEvidence("단원", payload.unit),
     payload.lengthOption ? `분량: ${payload.lengthOption}` : "",

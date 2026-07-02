@@ -34,6 +34,7 @@ export type SubjectRecordFormPayload = {
   grade: string;
   department: Department;
   subjectName: string;
+  learningModule?: string;
   textbook: string;
   unit: string;
   lengthOption?: CommentLength;

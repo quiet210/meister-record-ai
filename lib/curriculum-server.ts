@@ -22,6 +22,7 @@ type CurriculumStandardRow = {
 
 type GetCurriculumStandardsBySubjectOptions = {
   schoolId?: string;
+  learningModule?: string;
   limit?: number;
 };
 
@@ -109,14 +110,29 @@ function phraseMatchScore(candidateText: string, inputValues: Array<string | und
 }
 
 function scoreCurriculumStandard(standard: CurriculumStandard, input: SubjectCurriculumSelectionInput) {
+  const selectedLearningModule = normalizeExactValue(input.learningModule);
+  const standardLearningModule = normalizeExactValue(standard.learningModule);
   const unitInputs = [input.unit];
   const activityInputs = [...(input.activityTypes || []), ...(input.competencies || []), ...(input.improvements || [])];
-  const allInputValues = [input.subjectName, input.unit, input.observationMemo, ...activityInputs];
+  const allInputValues = [input.subjectName, input.learningModule, input.unit, input.observationMemo, ...activityInputs];
   const allInputTokens = uniqueTokens(allInputValues);
   const unitTokens = uniqueTokens(unitInputs);
   const activityTokens = uniqueTokens(activityInputs);
 
   let score = 0;
+
+  if (selectedLearningModule && standardLearningModule) {
+    if (standardLearningModule === selectedLearningModule) {
+      score += 160;
+    } else {
+      const selectedCompact = compactSearchText(selectedLearningModule);
+      const standardCompact = compactSearchText(standardLearningModule);
+      if (selectedCompact && standardCompact && (selectedCompact.includes(standardCompact) || standardCompact.includes(selectedCompact))) {
+        score += 80;
+      }
+    }
+  }
+
   score += phraseMatchScore(standard.learningModule, allInputValues, 24);
   score += countTokenOverlap(standard.learningModule, allInputTokens) * 8;
   score += phraseMatchScore(standard.unitName, unitInputs, 18);
@@ -148,6 +164,7 @@ function buildCurriculumSelectionSeed(input: SubjectCurriculumSelectionInput) {
     input.selectedStudentId ? `selectedStudentId:${normalizeExactValue(input.selectedStudentId)}` : "",
     input.studentNo ? `student_no:${normalizeExactValue(input.studentNo)}` : "",
     input.studentName ? `studentName:${normalizeExactValue(input.studentName)}` : "",
+    input.learningModule ? `learningModule:${normalizeExactValue(input.learningModule)}` : "",
     `date:${getTodaySeedDate()}`
   ]
     .filter(Boolean)
@@ -258,6 +275,11 @@ export async function getCurriculumStandardsBySubject(subjectName: string, optio
     .order("unit_name", { ascending: true })
     .order("sort_order", { ascending: true });
 
+  const normalizedLearningModule = normalizeExactValue(options?.learningModule);
+  if (normalizedLearningModule) {
+    query = query.eq("learning_module", normalizedLearningModule);
+  }
+
   if (options?.limit && Number.isFinite(options.limit) && options.limit > 0) {
     query = query.limit(options.limit);
   }
@@ -280,6 +302,27 @@ export async function getCurriculumStandardsBySubject(subjectName: string, optio
 
 export async function selectCurriculumStandardsForSubjectComment(input: SubjectCurriculumSelectionInput) {
   const seed = buildCurriculumSelectionSeed(input);
+  const requestedLearningModule = normalizeExactValue(input.learningModule);
+
+  if (requestedLearningModule) {
+    const moduleResult = await getCurriculumStandardsBySubject(input.subjectName, {
+      schoolId: input.schoolId,
+      learningModule: requestedLearningModule
+    });
+
+    if (!moduleResult.error && moduleResult.standards.length > 0) {
+      return {
+        standards: selectCurriculumStandards(moduleResult.standards, input, seed),
+        totalCount: moduleResult.totalCount,
+        seed,
+        requestedLearningModule,
+        usedLearningModule: requestedLearningModule,
+        fallbackToSubject: false,
+        error: moduleResult.error
+      };
+    }
+  }
+
   const result = await getCurriculumStandardsBySubject(input.subjectName, {
     schoolId: input.schoolId
   });
@@ -289,6 +332,9 @@ export async function selectCurriculumStandardsForSubjectComment(input: SubjectC
       standards: [] as CurriculumStandard[],
       totalCount: result.totalCount,
       seed,
+      requestedLearningModule,
+      usedLearningModule: "",
+      fallbackToSubject: Boolean(requestedLearningModule),
       error: result.error
     };
   }
@@ -297,6 +343,9 @@ export async function selectCurriculumStandardsForSubjectComment(input: SubjectC
     standards: selectCurriculumStandards(result.standards, input, seed),
     totalCount: result.totalCount,
     seed,
+    requestedLearningModule,
+    usedLearningModule: "",
+    fallbackToSubject: Boolean(requestedLearningModule),
     error: result.error
   };
 }

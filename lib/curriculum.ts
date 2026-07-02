@@ -525,7 +525,12 @@ export async function deleteCurriculumSubject(id: string) {
   return error ? { error: formatCurriculumError("교과목 삭제", error) } : {};
 }
 
-export async function listCurriculumStandards(options?: { subjectName?: string; limit?: number }) {
+export async function listCurriculumStandards(options?: {
+  subjectName?: string;
+  learningModule?: string;
+  status?: CurriculumStandardStatus;
+  limit?: number;
+}) {
   const contextResult = await getCurriculumContext();
   if (!contextResult.context) return { standards: [] as CurriculumStandard[], error: contextResult.error };
 
@@ -542,6 +547,14 @@ export async function listCurriculumStandards(options?: { subjectName?: string; 
 
   if (options?.subjectName?.trim()) {
     query = query.eq("subject_name", normalizeExactValue(options.subjectName));
+  }
+
+  if (options?.learningModule?.trim()) {
+    query = query.eq("learning_module", normalizeExactValue(options.learningModule));
+  }
+
+  if (options?.status) {
+    query = query.eq("status", options.status);
   }
 
   if (options?.limit) {

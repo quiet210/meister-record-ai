@@ -23,6 +23,13 @@ export type SubjectOption = {
   sortOrder?: number;
 };
 
+export type SettingsSubjectOption = {
+  id?: string;
+  subjectName: string;
+  subjectType: "general" | "ncs";
+  sortOrder?: number;
+};
+
 export type ChecklistCategoryKey =
   | "subject_activity_type"
   | "subject_competency"
@@ -56,6 +63,7 @@ export type ChecklistItem = {
 export type SettingsOptions = {
   departmentOptions: DepartmentOption[];
   subjectOptions: string[];
+  curriculumSubjects: SettingsSubjectOption[];
   subjectChecklistGroups: ChecklistGroup[];
   subjectImprovementOptions: string[];
   behaviorSchoolLifeChecklistGroups: ChecklistGroup[];
@@ -81,6 +89,7 @@ type CurriculumSubjectSettingsRow = {
   id: string;
   school_id: string;
   subject_name: string;
+  subject_type: "general" | "ncs";
   sort_order: number;
 };
 
@@ -186,7 +195,7 @@ export const behaviorSchoolLifeChecklistCategoryKeys: ChecklistCategoryKey[] = [
 export const behaviorIndustrialChecklistCategoryKeys: ChecklistCategoryKey[] = ["behavior_safety", "behavior_work_ethic"];
 
 const departmentColumns = "id, school_id, code, label, sort_order";
-const curriculumSubjectColumns = "id, school_id, subject_name, sort_order";
+const curriculumSubjectColumns = "id, school_id, subject_name, subject_type, sort_order";
 const categoryColumns = "id, school_id, mode, key, label, sort_order";
 const itemColumns = "id, school_id, category_id, label, sort_order";
 
@@ -258,6 +267,11 @@ export function getFallbackSettingsOptions(): SettingsOptions {
       sortOrder: (index + 1) * 10
     })),
     subjectOptions: [...fallbackSubjectOptions],
+    curriculumSubjects: fallbackSubjectOptions.map((subjectName, index) => ({
+      subjectName,
+      subjectType: "general",
+      sortOrder: (index + 1) * 10
+    })),
     subjectChecklistGroups: subjectGroups,
     subjectImprovementOptions: subjectImprovementGroup?.options || [...improvementOptions],
     behaviorSchoolLifeChecklistGroups: behaviorSchoolLifeGroups,
@@ -337,6 +351,16 @@ export async function loadSettingsOptions(): Promise<SettingsOptions> {
 
   const subjectImprovementGroup = buildGroups(["subject_improvement"], categoryRows, itemsByKey)[0];
 
+  const curriculumSubjects =
+    subjectRows.length > 0
+      ? subjectRows.map((row) => ({
+          id: row.id,
+          subjectName: row.subject_name,
+          subjectType: row.subject_type,
+          sortOrder: row.sort_order
+        }))
+      : fallback.curriculumSubjects;
+
   return {
     departmentOptions:
       departmentRows.length > 0
@@ -347,7 +371,8 @@ export async function loadSettingsOptions(): Promise<SettingsOptions> {
             sortOrder: row.sort_order
           }))
         : fallback.departmentOptions,
-    subjectOptions: subjectRows.length > 0 ? subjectRows.map((row) => row.subject_name) : fallback.subjectOptions,
+    subjectOptions: curriculumSubjects.map((subject) => subject.subjectName),
+    curriculumSubjects,
     subjectChecklistGroups: buildGroups(subjectChecklistCategoryKeys, categoryRows, itemsByKey),
     subjectImprovementOptions: subjectImprovementGroup?.options || fallback.subjectImprovementOptions,
     behaviorSchoolLifeChecklistGroups: buildGroups(behaviorSchoolLifeChecklistCategoryKeys, categoryRows, itemsByKey),
