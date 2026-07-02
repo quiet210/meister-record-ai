@@ -32,6 +32,7 @@ type GeminiCallResult =
     };
 
 type CurriculumPromptStandard = {
+  learningModule?: string;
   unitName: string;
   achievementStandard: string;
   keywords: string;
@@ -108,17 +109,23 @@ function buildCurriculumStandardsSection(standards: CurriculumPromptStandard[] =
 
   if (selectedStandards.length === 0) return "";
 
-  const standardBlocks = selectedStandards.map((standard, index) =>
-    [
-      `${index + 1}.`,
-      "[성취기준]",
-      standard.achievementStandard,
-      "[단원]",
-      standard.unitName || "입력 없음",
-      "[핵심키워드]",
-      standard.keywords || "입력 없음"
-    ].join("\n")
-  );
+  const standardBlocks = selectedStandards.map((standard, index) => {
+    const lines = [`${index + 1}.`];
+    const learningModule = standard.learningModule?.trim();
+    const keywords = standard.keywords.trim();
+
+    if (learningModule) {
+      lines.push("[학습모듈]", learningModule);
+    }
+
+    lines.push("[단원]", standard.unitName || "입력 없음", "[성취기준]", standard.achievementStandard);
+
+    if (keywords) {
+      lines.push("[핵심키워드]", keywords);
+    }
+
+    return lines.join("\n");
+  });
 
   return [
     "다음은 해당 과목의 성취기준이다.",

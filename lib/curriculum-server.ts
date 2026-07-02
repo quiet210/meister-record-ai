@@ -8,6 +8,7 @@ type CurriculumStandardRow = {
   subject_id: string;
   subject_name: string;
   subject_type: CurriculumSubjectType;
+  learning_module: string | null;
   unit_name: string;
   achievement_standard: string;
   keywords: string | null;
@@ -32,7 +33,7 @@ type ScoredCurriculumStandard = {
 };
 
 const standardColumns =
-  "id, school_id, subject_id, subject_name, subject_type, unit_name, achievement_standard, keywords, uploaded_by, status, duplicate_status, sort_order, created_at, updated_at";
+  "id, school_id, subject_id, subject_name, subject_type, learning_module, unit_name, achievement_standard, keywords, uploaded_by, status, duplicate_status, sort_order, created_at, updated_at";
 
 function normalizeExactValue(value?: string | null) {
   return (value || "").trim().replace(/\s+/g, " ");
@@ -45,6 +46,7 @@ function normalizeStandard(row: CurriculumStandardRow): CurriculumStandard {
     subjectId: row.subject_id,
     subjectName: row.subject_name,
     subjectType: row.subject_type,
+    learningModule: row.learning_module || "",
     unitName: row.unit_name,
     achievementStandard: row.achievement_standard,
     keywords: row.keywords || "",
@@ -115,14 +117,16 @@ function scoreCurriculumStandard(standard: CurriculumStandard, input: SubjectCur
   const activityTokens = uniqueTokens(activityInputs);
 
   let score = 0;
+  score += phraseMatchScore(standard.learningModule, allInputValues, 24);
+  score += countTokenOverlap(standard.learningModule, allInputTokens) * 8;
   score += phraseMatchScore(standard.unitName, unitInputs, 18);
-  score += phraseMatchScore(standard.keywords, allInputValues, 8);
-  score += phraseMatchScore(standard.achievementStandard, allInputValues, 4);
   score += countTokenOverlap(standard.unitName, unitTokens) * 10;
   score += countTokenOverlap(standard.unitName, allInputTokens) * 4;
-  score += countTokenOverlap(standard.keywords, activityTokens) * 7;
-  score += countTokenOverlap(standard.keywords, allInputTokens) * 4;
+  score += phraseMatchScore(standard.achievementStandard, allInputValues, 8);
   score += countTokenOverlap(standard.achievementStandard, allInputTokens) * 2;
+  score += phraseMatchScore(standard.keywords, allInputValues, 4);
+  score += countTokenOverlap(standard.keywords, activityTokens) * 3;
+  score += countTokenOverlap(standard.keywords, allInputTokens) * 2;
 
   return score;
 }
@@ -250,6 +254,7 @@ export async function getCurriculumStandardsBySubject(subjectName: string, optio
     .eq("school_id", schoolId)
     .eq("status", "active")
     .eq("subject_name", normalizedSubjectName)
+    .order("learning_module", { ascending: true, nullsFirst: true })
     .order("unit_name", { ascending: true })
     .order("sort_order", { ascending: true });
 

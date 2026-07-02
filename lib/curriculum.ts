@@ -22,6 +22,7 @@ export type CurriculumStandard = {
   subjectId: string;
   subjectName: string;
   subjectType: CurriculumSubjectType;
+  learningModule: string;
   unitName: string;
   achievementStandard: string;
   keywords: string;
@@ -37,6 +38,7 @@ export type CurriculumUploadRawRow = {
   rowNumber: number;
   subjectName: string;
   subjectTypeLabel: string;
+  learningModule: string;
   unitName: string;
   achievementStandard: string;
   keywords: string;
@@ -69,6 +71,7 @@ export type CreateCurriculumStandardInput = {
   subjectId: string;
   subjectName: string;
   subjectType: CurriculumSubjectType;
+  learningModule: string;
   unitName: string;
   achievementStandard: string;
   keywords: string;
@@ -105,6 +108,7 @@ type CurriculumStandardRow = {
   subject_id: string;
   subject_name: string;
   subject_type: CurriculumSubjectType;
+  learning_module: string | null;
   unit_name: string;
   achievement_standard: string;
   keywords: string | null;
@@ -118,7 +122,7 @@ type CurriculumStandardRow = {
 
 const subjectColumns = "id, school_id, subject_name, subject_type, description, sort_order, created_at, updated_at";
 const standardColumns =
-  "id, school_id, subject_id, subject_name, subject_type, unit_name, achievement_standard, keywords, uploaded_by, status, duplicate_status, sort_order, created_at, updated_at";
+  "id, school_id, subject_id, subject_name, subject_type, learning_module, unit_name, achievement_standard, keywords, uploaded_by, status, duplicate_status, sort_order, created_at, updated_at";
 
 export const curriculumSubjectTypeLabels: Record<CurriculumSubjectType, string> = {
   general: "일반교과",
@@ -176,6 +180,7 @@ function normalizeStandard(row: CurriculumStandardRow): CurriculumStandard {
     subjectId: row.subject_id,
     subjectName: row.subject_name,
     subjectType: row.subject_type,
+    learningModule: row.learning_module || "",
     unitName: row.unit_name,
     achievementStandard: row.achievement_standard,
     keywords: row.keywords || "",
@@ -210,8 +215,13 @@ function normalizeExactValue(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
-function exactDuplicateKey(input: { subjectName: string; unitName: string; achievementStandard: string }) {
-  return [normalizeExactValue(input.subjectName), normalizeExactValue(input.unitName), normalizeExactValue(input.achievementStandard)].join("\u001f");
+function exactDuplicateKey(input: { subjectName: string; learningModule: string; unitName: string; achievementStandard: string }) {
+  return [
+    normalizeExactValue(input.subjectName),
+    normalizeExactValue(input.learningModule),
+    normalizeExactValue(input.unitName),
+    normalizeExactValue(input.achievementStandard)
+  ].join("\u001f");
 }
 
 function unitKey(value: string) {
@@ -277,6 +287,7 @@ export function buildCurriculumStandardInputs(rows: CurriculumUploadPreviewRow[]
         subjectId: row.subjectId,
         subjectName: normalizeExactValue(row.subjectName),
         subjectType: row.subjectType,
+        learningModule: normalizeExactValue(row.learningModule),
         unitName: normalizeExactValue(row.unitName),
         achievementStandard: normalizeExactValue(row.achievementStandard),
         keywords: normalizeExactValue(row.keywords),
@@ -293,15 +304,17 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
   const seenExactKeys = new Set<string>();
   const comparableRows = standards.map((standard) => ({
     subjectNameKey: normalizeCurriculumHeader(standard.subjectName),
+    learningModuleKey: normalizeCurriculumHeader(standard.learningModule),
     unitNameKey: unitKey(standard.unitName),
     normalizedAchievement: normalizeAchievementText(standard.achievementStandard),
-    label: `${standard.subjectName} / ${standard.unitName} / ${standard.achievementStandard}`
+    label: [standard.subjectName, standard.learningModule, standard.unitName, standard.achievementStandard].filter(Boolean).join(" / ")
   }));
 
   const previewRows: CurriculumUploadPreviewRow[] = [];
 
   inputRows.forEach((rawRow, index) => {
     const subjectName = normalizeExactValue(rawRow.subjectName);
+    const learningModule = normalizeExactValue(rawRow.learningModule);
     const unitName = normalizeExactValue(rawRow.unitName);
     const achievementStandard = normalizeExactValue(rawRow.achievementStandard);
     const keywords = normalizeExactValue(rawRow.keywords);
@@ -312,6 +325,7 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
     const baseRow = {
       ...rawRow,
       subjectName: canonicalSubjectName,
+      learningModule,
       unitName,
       achievementStandard,
       keywords,
@@ -352,25 +366,36 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
       return;
     }
 
-    const exactKey = exactDuplicateKey({ subjectName, unitName, achievementStandard });
+    if (subject.subjectType === "ncs" && !learningModule) {
+      messages.push("NCS교과는 학습모듈명 입력을 권장합니다.");
+    }
+
+    const exactKey = exactDuplicateKey({
+      subjectName: canonicalSubjectName,
+      learningModule,
+      unitName,
+      achievementStandard
+    });
 
     if (existingExactKeys.has(exactKey) || seenExactKeys.has(exactKey)) {
       seenExactKeys.add(exactKey);
       previewRows.push({
         ...baseRow,
         status: "exact_duplicate",
-        messages: ["동일한 과목명, 단원명, 성취기준이 이미 있습니다."]
+        messages: [...messages, "동일한 과목명, 학습모듈명, 단원명, 성취기준이 이미 있습니다."]
       });
       return;
     }
 
-    const currentSubjectNameKey = normalizeCurriculumHeader(subjectName);
+    const currentSubjectNameKey = normalizeCurriculumHeader(canonicalSubjectName);
+    const currentLearningModuleKey = normalizeCurriculumHeader(learningModule);
     const currentUnitNameKey = unitKey(unitName);
     const normalizedAchievement = normalizeAchievementText(achievementStandard);
     const similarMatches = comparableRows
       .filter(
         (candidate) =>
           candidate.subjectNameKey === currentSubjectNameKey &&
+          candidate.learningModuleKey === currentLearningModuleKey &&
           candidate.unitNameKey === currentUnitNameKey &&
           isSimilarAchievementText(normalizedAchievement, candidate.normalizedAchievement)
       )
@@ -380,9 +405,10 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
     seenExactKeys.add(exactKey);
     comparableRows.push({
       subjectNameKey: currentSubjectNameKey,
+      learningModuleKey: currentLearningModuleKey,
       unitNameKey: currentUnitNameKey,
       normalizedAchievement,
-      label: `${subjectName} / ${unitName} / ${achievementStandard}`
+      label: [canonicalSubjectName, learningModule, unitName, achievementStandard].filter(Boolean).join(" / ")
     });
 
     if (similarMatches.length > 0) {
@@ -390,7 +416,7 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
         ...baseRow,
         status: "similar_duplicate",
         similarMatches,
-        messages: ["정규화된 성취기준이 기존 데이터와 매우 유사합니다."]
+        messages: [...messages, "정규화된 성취기준이 동일 과목/학습모듈/단원 안의 기존 데이터와 매우 유사합니다."]
       });
       return;
     }
@@ -509,6 +535,7 @@ export async function listCurriculumStandards(options?: { subjectName?: string; 
     .select(standardColumns)
     .eq("school_id", profile.school_id)
     .order("subject_name", { ascending: true })
+    .order("learning_module", { ascending: true, nullsFirst: true })
     .order("unit_name", { ascending: true })
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false });
@@ -538,6 +565,7 @@ export async function createCurriculumStandards(inputs: CreateCurriculumStandard
     subject_id: input.subjectId,
     subject_name: normalizeExactValue(input.subjectName),
     subject_type: input.subjectType,
+    learning_module: normalizeExactValue(input.learningModule) || null,
     unit_name: normalizeExactValue(input.unitName),
     achievement_standard: normalizeExactValue(input.achievementStandard),
     keywords: normalizeExactValue(input.keywords),
@@ -567,6 +595,7 @@ export async function getCurriculumStandardsBySubject(subjectName: string) {
     .eq("school_id", profile.school_id)
     .eq("subject_name", normalizedSubjectName)
     .eq("status", "active")
+    .order("learning_module", { ascending: true, nullsFirst: true })
     .order("unit_name", { ascending: true })
     .order("sort_order", { ascending: true });
 
