@@ -1,25 +1,26 @@
 import { NextResponse } from "next/server";
-import { getCurriculumStandardsBySubject } from "@/lib/curriculum-server";
+import { selectCurriculumStandardsForSubjectComment } from "@/lib/curriculum-server";
 import { generateStudentRecordDraftWithGemini } from "@/lib/gemini";
 import type { SubjectRecordFormPayload } from "@/lib/types";
 
-const maxPromptStandards = 5;
-
 export async function POST(request: Request) {
   const body = (await request.json()) as Omit<SubjectRecordFormPayload, "mode">;
-  const curriculumResult = await getCurriculumStandardsBySubject(body.subjectName, {
-    schoolId: body.schoolId,
-    limit: maxPromptStandards
-  });
-  const curriculumStandards = curriculumResult.standards.slice(0, maxPromptStandards);
+  const curriculumResult = await selectCurriculumStandardsForSubjectComment(body);
+  const curriculumStandards = curriculumResult.standards;
 
   console.log(
     "[subject-comment curriculum standards]",
     JSON.stringify(
       {
         selectedSubject: body.subjectName,
-        fetchedCount: curriculumResult.totalCount,
-        promptIncludedCount: curriculumStandards.length
+        totalCandidateCount: curriculumResult.totalCount,
+        selectedStandards: curriculumStandards.map((standard) => ({
+          learningModule: standard.learningModule,
+          unitName: standard.unitName,
+          achievementStandard: standard.achievementStandard,
+          keywords: standard.keywords
+        })),
+        seed: curriculumResult.seed
       },
       null,
       2
