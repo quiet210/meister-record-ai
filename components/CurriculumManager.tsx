@@ -65,6 +65,7 @@ const emptySubjectForm: SubjectForm = {
 const uploadColumnAliases = {
   subjectName: ["과목명", "subjectname", "subject_name", "subject"],
   subjectTypeLabel: ["교과유형", "교과유형값", "subjecttype", "subject_type", "type"],
+  learningModule: ["학습모듈명", "학습모듈", "모듈명", "learningmodule", "learning_module", "module"],
   unitName: ["단원명", "unitname", "unit_name", "unit", "단원"],
   achievementStandard: ["성취기준", "achievementstandard", "achievement_standard", "standard"],
   keywords: ["핵심키워드", "키워드", "keywords", "keyword"]
@@ -138,6 +139,7 @@ async function parseCurriculumUploadFile(file: File) {
       rowNumber: index + 2,
       subjectName: getRowValue(row, uploadColumnAliases.subjectName),
       subjectTypeLabel: getRowValue(row, uploadColumnAliases.subjectTypeLabel),
+      learningModule: getRowValue(row, uploadColumnAliases.learningModule),
       unitName: getRowValue(row, uploadColumnAliases.unitName),
       achievementStandard: getRowValue(row, uploadColumnAliases.achievementStandard),
       keywords: getRowValue(row, uploadColumnAliases.keywords)
@@ -147,6 +149,7 @@ async function parseCurriculumUploadFile(file: File) {
       [
         rawRow.subjectName,
         rawRow.subjectTypeLabel,
+        rawRow.learningModule,
         rawRow.unitName,
         rawRow.achievementStandard,
         rawRow.keywords
@@ -573,7 +576,7 @@ export function CurriculumManager() {
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">성취기준 일괄 업로드</h2>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    과목명, 교과유형, 단원명, 성취기준, 핵심키워드 컬럼을 가진 xlsx, xls, csv 파일을 미리보기 후 저장합니다.
+                    과목명, 교과유형, 학습모듈명, 단원명, 성취기준, 핵심키워드 컬럼을 가진 xlsx, xls, csv 파일을 미리보기 후 저장합니다.
                   </p>
                 </div>
               </div>
@@ -672,33 +675,37 @@ export function CurriculumManager() {
               ) : null}
 
               <div className="mt-4 overflow-x-auto rounded-md border border-slate-200">
-                <table className="min-w-[980px] divide-y divide-slate-200 text-left text-sm">
+                <table className="min-w-[1180px] divide-y divide-slate-200 text-left text-sm">
                   <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                     <tr>
                       <th className="px-3 py-2">행</th>
-                      <th className="px-3 py-2">상태</th>
                       <th className="px-3 py-2">과목명</th>
                       <th className="px-3 py-2">교과유형</th>
+                      <th className="px-3 py-2">학습모듈명</th>
                       <th className="px-3 py-2">단원명</th>
                       <th className="px-3 py-2">성취기준</th>
-                      <th className="px-3 py-2">메시지</th>
+                      <th className="px-3 py-2">핵심키워드</th>
+                      <th className="px-3 py-2">상태</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {previewRows.map((row) => {
                       const meta = statusMeta[row.status];
+                      const hasWarning = row.status === "valid" && row.messages.length > 0;
                       return (
-                        <tr key={`${row.rowNumber}-${row.subjectName}-${row.unitName}`} className="align-top">
+                        <tr key={`${row.rowNumber}-${row.subjectName}-${row.learningModule}-${row.unitName}`} className="align-top">
                           <td className="px-3 py-3 text-slate-500">{row.rowNumber}</td>
-                          <td className="px-3 py-3">
-                            <span className={`inline-flex rounded-md px-2 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>
-                          </td>
                           <td className="px-3 py-3 font-semibold text-slate-900">{row.subjectName || "-"}</td>
                           <td className="px-3 py-3 text-slate-700">{row.subjectType ? subjectTypeLabel(row.subjectType) : row.subjectTypeLabel || "-"}</td>
+                          <td className="px-3 py-3 text-slate-700">{row.learningModule || "-"}</td>
                           <td className="px-3 py-3 text-slate-700">{row.unitName || "-"}</td>
                           <td className="max-w-md px-3 py-3 leading-6 text-slate-700">{row.achievementStandard || "-"}</td>
+                          <td className="px-3 py-3 text-slate-700">{row.keywords || "-"}</td>
                           <td className="max-w-sm px-3 py-3 text-xs leading-5 text-slate-600">
-                            {row.messages.length > 0 ? row.messages.join(" ") : "저장 가능"}
+                            <span className={`inline-flex rounded-md px-2 py-1 text-xs font-bold ${hasWarning ? "bg-amber-50 text-amber-700" : meta.className}`}>
+                              {hasWarning ? "경고" : meta.label}
+                            </span>
+                            <span className="mt-1 block">{row.messages.length > 0 ? row.messages.join(" ") : "저장 가능"}</span>
                             {row.similarMatches.length > 0 ? (
                               <span className="mt-1 block text-amber-700">유사 후보: {row.similarMatches[0]}</span>
                             ) : null}
@@ -745,6 +752,9 @@ export function CurriculumManager() {
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-slate-950">{standard.subjectName}</p>
                       <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{subjectTypeLabel(standard.subjectType)}</span>
+                      {standard.learningModule ? (
+                        <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">{standard.learningModule}</span>
+                      ) : null}
                       <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{standard.unitName}</span>
                       {standard.duplicateStatus === "similar_included" ? (
                         <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">유사 포함</span>
