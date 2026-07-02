@@ -79,10 +79,13 @@
 
 - 학생 선택 후 과목, 학습모듈, 단원, 활동유형, 역량키워드, 보완점, 교사 관찰 메모를 입력해 과세특 초안 생성
 - 과목 선택 시 `curriculum_subjects.subject_type`을 함께 확인해 일반교과(`general`)와 NCS교과(`ncs`)를 판정
+- 과목 선택 UI는 `curriculum_subjects` 전체 목록 또는 fallback 전체 목록을 options로 유지하고, 선택 과목명은 value로만 관리
 - 생성 API는 로그인 토큰으로 서버에서 확인한 학교 ID만 사용해 성취기준을 조회
 - 일반교과는 학습모듈 선택 UI를 비활성화하고 “일반교과는 학습모듈을 사용하지 않습니다.” 안내 표시
-- NCS교과는 선택 과목의 active `curriculum_standards.learning_module` 목록을 불러오며, 중복 학습모듈명과 빈 값은 제외
+- 과목이 바뀌면 기존 학습모듈 선택값과 성취기준 preview 상태를 초기화
+- NCS교과는 선택 과목의 active `curriculum_standards.learning_module` 전체 목록을 다시 불러오며, 중복 학습모듈명과 빈 값은 제외
 - 학습모듈 선택 시 해당 모듈의 단원명 후보를 제공하고, 단원명이 하나면 단원 입력칸에 자동 입력
+- 학습모듈 선택 시 단원명 자동완성 후보를 제공하되, 단원명 입력값으로 후보 목록 자체를 덮어쓰지 않음
 - 학습모듈 선택 시 학습모듈명, 단원명, 성취기준, 핵심키워드 기준 참고 성취기준을 최대 5개 미리보기로 표시
 - 활동유형, 역량키워드, 보완점은 필수 선택이 아니며, 교사 관찰 메모 또는 선택 항목 중 하나 이상 있으면 생성 가능
 - 성취기준 후보는 학습모듈이 선택되면 `subject_name + learning_module` 기준으로 우선 조회하고, 없으면 기존 `subject_name` 기준으로 fallback
@@ -103,8 +106,10 @@
 - `/bulk-subject-comment`에서 과세특 일괄 생성
 - `/bulk-behavior-comment`에서 행동특성 일괄 생성
 - 과세특 일괄 생성 공통 설정에서 과목 유형에 따라 학습모듈 선택 UI 활성/비활성 적용
+- 과세특 일괄 생성 공통 과목 선택도 전체 과목 options를 유지하고 선택값만 value로 관리
 - 과세특 일괄 생성에서 선택한 학습모듈은 모든 선택 학생의 생성 payload에 공통 적용
 - 학년, 학과, 반 필터
+- 학생 필터의 학년, 학과, 반 선택 UI는 현재 선택값으로 options 배열을 재구성하지 않음
 - 학생 다중 선택
 - 학생별 입력 테이블 제공
 - 학생별 입력값 개별 관리
@@ -120,6 +125,7 @@
 - `/student-records`에서 학생별 과세특/행특 최신본과 생성 이력 확인
 - 현재 로그인한 교사의 `record_drafts.user_id`에 해당하는 학생부만 조회
 - 좌측 학생 목록 검색과 필터
+- 학생 목록 필터의 학년, 학과, 반 options는 전체 후보 목록을 유지
 - 우측 학생별 카드형 상세
 - 과세특/행특 각각 AI 원본, 수정본, 최종본 탭 제공
 - 생성, 수정 저장, 최종 확정 이력을 timeline으로 표시
@@ -192,6 +198,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 
 - `RecordComposer`: 단일 과세특/행특 생성 상태와 저장 흐름 관리
 - `DesktopRecordComposer`, `MobileRecordStepper`: 단일 생성 반응형 UI
+- `SubjectSelect`: 과목 선택 공통 select. 전체 과목 options와 선택 value를 분리해 관리
 - `SubjectLearningModuleControls`, `useSubjectLearningModule`: 과세특 학습모듈 선택, 단원 후보, 성취기준 미리보기 공통 처리
 - `BulkSubjectCommentComposer`: 과세특 일괄 생성
 - `BulkBehaviorCommentComposer`: 행특 일괄 생성
@@ -254,6 +261,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 
 - 경로: `/subject-comment`
 - 학생과 과목 정보를 선택하고 과세특 초안 생성
+- 과목 선택은 `SubjectSelect`를 통해 전체 과목 목록을 계속 표시
 - 일반교과는 학습모듈 선택 비활성화, NCS교과는 학습모듈 선택과 단원 자동완성 제공
 - 선택한 학습모듈의 성취기준을 우선 사용하고, 없으면 기존 과목 기준 성취기준으로 fallback
 - 학습모듈을 포함한 성취기준 RAG/관련도 선택 결과를 생성 프롬프트에 반영
@@ -277,6 +285,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 
 - 경로: `/student-records`
 - 학생별 과세특/행특 최신본 조회
+- 학생 목록 필터는 현재 학년/학과/반 선택값과 후보 목록을 분리해 관리
 - AI 원본, 수정본, 최종본 비교
 - 생성 이력 timeline 확인
 - 복사, 재생성, 최종 확정/해제
@@ -319,6 +328,7 @@ RAG
 
 - 교사가 학생을 선택합니다.
 - 과세특 또는 행동특성 입력값을 작성합니다.
+- 과세특 과목 선택 options는 학교의 `curriculum_subjects` 전체 목록 또는 fallback 전체 목록을 사용하고, subject_type 판정과 학습모듈 조회는 선택된 value 기준으로 수행합니다.
 - 과세특은 과목과 성취기준 후보를 조회하고 학습모듈, 단원명, 성취기준, 핵심키워드 순서의 관련도/랜덤 분산 로직으로 참고 성취기준을 선별합니다.
 - NCS교과에서 학습모듈을 선택하면 해당 학습모듈 안에서 먼저 후보를 고르고, 후보가 없으면 기존 과목명 기준 조회로 보완합니다.
 - RAG 문서와 성취기준, 교사 입력 근거를 생성 프롬프트에 반영합니다.
