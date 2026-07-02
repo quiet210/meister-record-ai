@@ -5,9 +5,11 @@ import { gradeOptions } from "@/lib/options";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
 import { finalizeRecordDraft, getEffectiveRecordContent, saveEditedRecordDraft, saveRecordDraft, unfinalizeRecordDraft } from "@/lib/record-drafts";
 import { ensureUserProfile, listStudents } from "@/lib/students";
+import type { CurriculumStandard, CurriculumSubjectType } from "@/lib/curriculum";
 import type { CommentLength, CommentMode, Department, GenerateResponse, RecordDraftLifecycleStatus, RecordFormPayload, Student } from "@/lib/types";
 import { DesktopRecordComposer } from "@/components/DesktopRecordComposer";
 import { MobileRecordStepper } from "@/components/MobileRecordStepper";
+import { useSubjectLearningModule } from "@/components/useSubjectLearningModule";
 
 type RecordComposerProps = {
   mode: CommentMode;
@@ -33,6 +35,14 @@ export type RecordComposerViewProps = {
   department: Department;
   className: string;
   subjectName: string;
+  subjectType: CurriculumSubjectType;
+  subjectTypeLabel: string;
+  learningModule: string;
+  learningModuleOptions: string[];
+  learningModuleUnitOptions: string[];
+  learningModulePreviewStandards: CurriculumStandard[];
+  isLearningModuleLoading: boolean;
+  learningModuleError: string;
   textbook: string;
   unit: string;
   activityTypes: string[];
@@ -63,6 +73,7 @@ export type RecordComposerViewProps = {
   setDepartment: (department: Department) => void;
   setClassName: (className: string) => void;
   setSubjectName: (subjectName: string) => void;
+  setLearningModule: (learningModule: string) => void;
   setTextbook: (textbook: string) => void;
   setUnit: (unit: string) => void;
   setActivityTypes: (values: string[]) => void;
@@ -138,6 +149,12 @@ export function RecordComposer({ mode }: RecordComposerProps) {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
+  const subjectLearningModule = useSubjectLearningModule({
+    enabled: mode === "subject",
+    subjectName,
+    curriculumSubjects: settingsOptions.curriculumSubjects,
+    setUnit
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -223,6 +240,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       grade,
       department,
       subjectName,
+      learningModule: subjectLearningModule.learningModule,
       textbook,
       unit,
       activityTypes,
@@ -235,6 +253,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
   function resetInputs() {
     if (mode === "subject") {
       setTextbook("");
+      subjectLearningModule.setLearningModule("");
       setUnit("");
       setActivityTypes([]);
       setCompetencies([]);
@@ -523,6 +542,14 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     department,
     className,
     subjectName,
+    subjectType: subjectLearningModule.selectedSubjectType,
+    subjectTypeLabel: subjectLearningModule.selectedSubjectTypeLabel,
+    learningModule: subjectLearningModule.learningModule,
+    learningModuleOptions: subjectLearningModule.learningModuleOptions,
+    learningModuleUnitOptions: subjectLearningModule.unitOptions,
+    learningModulePreviewStandards: subjectLearningModule.previewStandards,
+    isLearningModuleLoading: subjectLearningModule.isLearningModuleLoading,
+    learningModuleError: subjectLearningModule.learningModuleError,
     textbook,
     unit,
     activityTypes,
@@ -553,6 +580,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     setDepartment,
     setClassName,
     setSubjectName,
+    setLearningModule: subjectLearningModule.setLearningModule,
     setTextbook,
     setUnit,
     setActivityTypes,

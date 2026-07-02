@@ -11,6 +11,7 @@ import type { CommentLength, Department } from "@/lib/types";
 import type { RecordComposerViewProps } from "@/components/RecordComposer";
 import { GeneratedResultCard } from "@/components/GeneratedResultCard";
 import { SelectableChipGroup } from "@/components/SelectableChipGroup";
+import { SubjectLearningModuleControls } from "@/components/SubjectLearningModuleControls";
 
 export function DesktopRecordComposer(props: RecordComposerViewProps) {
   const { mode, config } = props;
@@ -93,6 +94,7 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
                         <option key={option} value={option} />
                       ))}
                     </datalist>
+                    <span className="field-help">교과유형: {props.subjectTypeLabel}</span>
                   </label>
 
                   <label className="space-y-2">
@@ -105,15 +107,20 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
                     />
                   </label>
 
-                  <label className="space-y-2">
-                    <span className="field-label">단원</span>
-                    <input
-                      className="input-base"
-                      placeholder="예: 센서 입력과 PLC 기본 명령어"
-                      value={props.unit}
-                      onChange={(event) => props.setUnit(event.target.value)}
-                    />
-                  </label>
+                  <SubjectLearningModuleControls
+                    className="col-span-2 xl:col-span-3"
+                    subjectType={props.subjectType}
+                    learningModule={props.learningModule}
+                    learningModuleOptions={props.learningModuleOptions}
+                    unit={props.unit}
+                    unitOptions={props.learningModuleUnitOptions}
+                    previewStandards={props.learningModulePreviewStandards}
+                    isLoading={props.isLearningModuleLoading}
+                    error={props.learningModuleError}
+                    datalistId="unit-options-desktop"
+                    onLearningModuleChange={props.setLearningModule}
+                    onUnitChange={props.setUnit}
+                  />
                 </>
               ) : (
                 <label className="space-y-2">

@@ -12,6 +12,7 @@ import type { CommentLength, Department } from "@/lib/types";
 import type { RecordComposerViewProps } from "@/components/RecordComposer";
 import { GeneratedResultCard } from "@/components/GeneratedResultCard";
 import { SelectableChipGroup } from "@/components/SelectableChipGroup";
+import { SubjectLearningModuleControls } from "@/components/SubjectLearningModuleControls";
 
 const steps = ["기본정보", "활동/생활 영역 선택", "교사 메모", "결과"] as const;
 
@@ -207,17 +208,25 @@ function BasicInfoStep(props: RecordComposerViewProps) {
                 <option key={option} value={option} />
               ))}
             </datalist>
+            <span className="field-help">교과유형: {props.subjectTypeLabel}</span>
           </label>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="space-y-2">
-              <span className="field-label">교과서</span>
-              <input className="input-base" placeholder="예: 자동화 설비 실습" value={props.textbook} onChange={(event) => props.setTextbook(event.target.value)} />
-            </label>
-            <label className="space-y-2">
-              <span className="field-label">단원</span>
-              <input className="input-base" placeholder="예: PLC 기본 명령어" value={props.unit} onChange={(event) => props.setUnit(event.target.value)} />
-            </label>
-          </div>
+          <label className="space-y-2">
+            <span className="field-label">교과서</span>
+            <input className="input-base" placeholder="예: 자동화 설비 실습" value={props.textbook} onChange={(event) => props.setTextbook(event.target.value)} />
+          </label>
+          <SubjectLearningModuleControls
+            subjectType={props.subjectType}
+            learningModule={props.learningModule}
+            learningModuleOptions={props.learningModuleOptions}
+            unit={props.unit}
+            unitOptions={props.learningModuleUnitOptions}
+            previewStandards={props.learningModulePreviewStandards}
+            isLoading={props.isLearningModuleLoading}
+            error={props.learningModuleError}
+            datalistId="unit-options-mobile"
+            onLearningModuleChange={props.setLearningModule}
+            onUnitChange={props.setUnit}
+          />
         </>
       ) : (
         <label className="space-y-2">

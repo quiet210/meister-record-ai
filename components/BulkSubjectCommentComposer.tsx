@@ -17,6 +17,8 @@ import {
 import { ensureUserProfile, listStudents } from "@/lib/students";
 import type { CommentLength, GenerateResponse, RecordDraftLifecycleStatus, Student, SubjectRecordFormPayload } from "@/lib/types";
 import { BulkDraftLifecycleEditor } from "@/components/BulkDraftLifecycleEditor";
+import { SubjectLearningModuleControls } from "@/components/SubjectLearningModuleControls";
+import { useSubjectLearningModule } from "@/components/useSubjectLearningModule";
 
 type BulkStatus = "waiting" | "queued" | "generating" | "completed" | "failed";
 
@@ -212,6 +214,11 @@ export function BulkSubjectCommentComposer() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState("");
+  const subjectLearningModule = useSubjectLearningModule({
+    subjectName,
+    curriculumSubjects: settingsOptions.curriculumSubjects,
+    setUnit
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -585,6 +592,7 @@ export function BulkSubjectCommentComposer() {
       grade: student.grade,
       department: student.department,
       subjectName,
+      learningModule: subjectLearningModule.learningModule,
       textbook: "",
       unit,
       lengthOption,
@@ -1181,7 +1189,7 @@ export function BulkSubjectCommentComposer() {
     }, 3000);
 
     return () => window.clearTimeout(timer);
-  }, [studentInputs, students, subjectName, unit, lengthOption, writingStyle]);
+  }, [studentInputs, students, subjectName, subjectLearningModule.learningModule, unit, lengthOption, writingStyle]);
 
   return (
     <div className="min-w-0 space-y-5">
@@ -1225,7 +1233,7 @@ export function BulkSubjectCommentComposer() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_1.15fr_1.25fr_1fr]">
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.25fr_1fr]">
           <label className="space-y-2">
             <span className="field-label">과목명</span>
             <input
@@ -1241,11 +1249,7 @@ export function BulkSubjectCommentComposer() {
                 <option key={option} value={option} />
               ))}
             </datalist>
-          </label>
-
-          <label className="space-y-2">
-            <span className="field-label">단원명</span>
-            <input className="input-base" placeholder="예: 센서 입력과 PLC 기본 명령어" value={unit} onChange={(event) => setUnit(event.target.value)} disabled={isGenerating} />
+            <span className="field-help">교과유형: {subjectLearningModule.selectedSubjectTypeLabel}</span>
           </label>
 
           <fieldset className="space-y-2">
@@ -1280,6 +1284,22 @@ export function BulkSubjectCommentComposer() {
               ))}
             </select>
           </label>
+
+          <SubjectLearningModuleControls
+            className="lg:col-span-3"
+            subjectType={subjectLearningModule.selectedSubjectType}
+            learningModule={subjectLearningModule.learningModule}
+            learningModuleOptions={subjectLearningModule.learningModuleOptions}
+            unit={unit}
+            unitOptions={subjectLearningModule.unitOptions}
+            previewStandards={subjectLearningModule.previewStandards}
+            isLoading={subjectLearningModule.isLearningModuleLoading}
+            error={subjectLearningModule.learningModuleError}
+            disabled={isGenerating}
+            datalistId="bulk-unit-options"
+            onLearningModuleChange={subjectLearningModule.setLearningModule}
+            onUnitChange={setUnit}
+          />
         </div>
       </section>
 
