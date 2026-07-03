@@ -49,6 +49,8 @@
 ### 학생 관리
 
 - 학생 목록 조회
+- 학생 관리 화면 최초 진입 시 목록을 숨기고, 학년과 반 선택 후 목록 표시
+- 학년/반 기준 필수 필터와 학과 선택 필터, 이름 검색 유지
 - 학생 추가, 수정, 삭제
 - 학년, 학과, 반, 번호, 이름 관리
 - 학생 엑셀 업로드
@@ -204,7 +206,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `BulkBehaviorCommentComposer`: 행특 일괄 생성
 - `BulkDraftLifecycleEditor`: 일괄 생성 결과 lifecycle 편집
 - `GeneratedResultCard`: 단일 생성 결과 편집/저장/확정 카드
-- `StudentManager`: 학생 CRUD와 엑셀 업로드
+- `StudentManager`: 학생 CRUD와 엑셀 업로드, 학년/반 선택 기반 목록 표시
 - `StudentRecordCenter`: 학생별 학생부 관리
 - `CurriculumManager`: 과목/성취기준 관리
 - `AdminChecklistManager`, `AdminDepartmentManager`: 관리자 설정
@@ -280,6 +282,9 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - 학생 CRUD
 - 학생 엑셀 업로드
 - 학생 템플릿 다운로드
+- 학생 목록은 최초 진입 시 표시하지 않고, 학년과 반을 선택하면 자동으로 표시
+- 학과는 선택 필터로 유지하며, 선택 시 현재 학년/반 학생 목록을 추가 필터링
+- 검색은 선택된 학년/반 목록 안에서 학생 이름 기준으로 적용
 
 ### 학생부 관리
 
@@ -447,7 +452,17 @@ Production URL: https://meister-record-ai.vercel.app
 GitHub: https://github.com/quiet210/meister-record-ai
 ```
 
-## 9. 향후 계획
+## 9. 최근 반영 사항
+
+- 학생 관리 화면에서 학년과 반을 선택한 뒤에만 학생 목록이 표시되도록 UX 개선
+- 일괄 과세특, 일괄 행특, 학생부 관리 화면 성능 최적화 작업 완료
+- `lib/generate-api-client.ts` 누락으로 발생하던 빌드 오류 해결
+- `record_drafts` RLS를 현재 로그인 교사 `user_id` 기준으로 강화
+- 교사별 학생부 draft 분리 완료
+- NCS교과 학습모듈 선택, 과목 변경 시 학습모듈 초기화, 새 과목 기준 학습모듈 목록 재조회 완료
+- 과목 선택 `datalist` 후보가 현재 선택 과목 1개로 좁아 보이던 버그 수정 완료
+
+## 10. 향후 계획
 
 현재 우선순위는 다음 순서입니다.
 
