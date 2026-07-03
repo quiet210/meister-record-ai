@@ -22,7 +22,6 @@ import {
 import {
   buildCurriculumStandardInputs,
   buildCurriculumUploadSummary,
-  createCurriculumStandards,
   createCurriculumSubject,
   curriculumSubjectTypeLabels,
   deleteCurriculumSubject,
@@ -31,6 +30,7 @@ import {
   listCurriculumSubjects,
   normalizeCurriculumHeader,
   previewCurriculumUploadRows,
+  saveCurriculumUpload,
   updateCurriculumSubject,
   type CurriculumStandard,
   type CurriculumSubject,
@@ -56,7 +56,8 @@ type UploadResult = {
   exactDuplicateRows: number;
   similarDuplicateExcludedRows: number;
   errorRows: number;
-  missingSubjectRows: number;
+  subjectTypeConflictRows: number;
+  createdSubjectCount: number;
 };
 
 type SubjectTypeFilter = CurriculumSubjectType | "all";
@@ -90,6 +91,14 @@ const statusMeta: Record<CurriculumUploadPreviewRow["status"], { label: string; 
     label: "정상",
     className: "bg-emerald-50 text-emerald-700"
   },
+  existing_subject: {
+    label: "기존 과목 사용",
+    className: "bg-blue-50 text-blue-700"
+  },
+  new_subject: {
+    label: "신규 과목 자동 등록 예정",
+    className: "bg-emerald-50 text-emerald-700"
+  },
   error: {
     label: "오류",
     className: "bg-rose-50 text-rose-700"
@@ -102,9 +111,9 @@ const statusMeta: Record<CurriculumUploadPreviewRow["status"], { label: string; 
     label: "유사 중복 의심",
     className: "bg-amber-50 text-amber-700"
   },
-  missing_subject: {
-    label: "과목 없음",
-    className: "bg-orange-50 text-orange-700"
+  subject_type_conflict: {
+    label: "과목 교과유형 충돌",
+    className: "bg-rose-50 text-rose-700"
   }
 };
 
@@ -209,16 +218,27 @@ async function parseCurriculumUploadFile(file: File) {
 }
 
 function summaryCards(summary: CurriculumUploadSummary | UploadResult) {
-  const savedRows = "savedRows" in summary ? summary.savedRows : summary.newRows;
-  const similarExcludedRows = "similarDuplicateExcludedRows" in summary ? summary.similarDuplicateExcludedRows : summary.similarDuplicateRows;
+  if ("savedRows" in summary) {
+    return [
+      { label: "총 행 수", value: summary.totalRows },
+      { label: "저장 수", value: summary.savedRows },
+      { label: "자동 생성 과목", value: summary.createdSubjectCount },
+      { label: "정확 중복 제외", value: summary.exactDuplicateRows },
+      { label: "유사 중복 제외", value: summary.similarDuplicateExcludedRows },
+      { label: "유형 충돌", value: summary.subjectTypeConflictRows },
+      { label: "오류", value: summary.errorRows }
+    ];
+  }
 
   return [
     { label: "총 행 수", value: summary.totalRows },
-    { label: "신규 저장 수", value: savedRows },
+    { label: "저장 가능", value: summary.newRows },
+    { label: "기존 과목 사용", value: summary.existingSubjectRows },
+    { label: "자동 등록 예정", value: summary.newSubjectRows },
     { label: "정확 중복 제외", value: summary.exactDuplicateRows },
-    { label: "유사 중복 제외", value: similarExcludedRows },
-    { label: "오류", value: summary.errorRows },
-    { label: "과목 없음", value: summary.missingSubjectRows }
+    { label: "유사 중복 의심", value: summary.similarDuplicateRows },
+    { label: "유형 충돌", value: summary.subjectTypeConflictRows },
+    { label: "오류", value: summary.errorRows }
   ];
 }
 
@@ -278,7 +298,8 @@ export function CurriculumManager() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isAdmin = profile?.role === "admin";
-  const canSaveUpload = buildCurriculumStandardInputs(previewRows, saveOption).length > 0;
+  const hasSubjectTypeConflict = previewRows.some((row) => row.status === "subject_type_conflict");
+  const canSaveUpload = !hasSubjectTypeConflict && buildCurriculumStandardInputs(previewRows, saveOption).length > 0;
   const hasSubjectLookupInput = Boolean(subjectSearchQuery.trim()) || subjectTypeFilter !== "all";
   const shouldShowSubjectResults = hasSubjectLookupInput || hasSubjectLookupRun;
   const selectedStandardGroups = useMemo(() => groupStandardsByLearningModule(selectedStandards), [selectedStandards]);
@@ -552,13 +573,19 @@ export function CurriculumManager() {
     setUploadResult(null);
 
     const inputs = buildCurriculumStandardInputs(previewRows, saveOption);
+    if (hasSubjectTypeConflict) {
+      setError("과목 교과유형 충돌이 있어 저장할 수 없습니다. 엑셀의 교과유형을 먼저 정리하세요.");
+      setIsSavingUpload(false);
+      return;
+    }
+
     if (inputs.length === 0) {
       setError("저장할 신규 성취기준이 없습니다.");
       setIsSavingUpload(false);
       return;
     }
 
-    const result = await createCurriculumStandards(inputs);
+    const result = await saveCurriculumUpload(inputs);
     if (result.error) {
       setError(result.error);
       setIsSavingUpload(false);
@@ -569,20 +596,22 @@ export function CurriculumManager() {
     const similarDuplicateExcludedRows = saveOption === "include_similar" ? 0 : summary.similarDuplicateRows;
     const nextUploadResult = {
       totalRows: summary.totalRows,
-      savedRows: result.standards.length,
+      savedRows: result.savedRows,
       exactDuplicateRows: summary.exactDuplicateRows,
       similarDuplicateExcludedRows,
       errorRows: summary.errorRows,
-      missingSubjectRows: summary.missingSubjectRows
+      subjectTypeConflictRows: summary.subjectTypeConflictRows,
+      createdSubjectCount: result.createdSubjectCount
     };
 
     setUploadResult(nextUploadResult);
-    setMessage(`${result.standards.length}개 성취기준을 저장했습니다.`);
+    setMessage(`${result.savedRows}개 성취기준을 저장했고, 과목 ${result.createdSubjectCount}개를 자동 등록했습니다.`);
     setPreviewRows([]);
     setPreviewSummary(null);
     setUploadFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
 
+    await loadAll();
     if (hasLoadedStandardCatalog) await loadStandardCatalog({ force: true });
     if (selectedSubject) await loadSelectedSubjectStandards(selectedSubject, { preserveFeedback: true });
     setIsSavingUpload(false);
@@ -700,7 +729,7 @@ export function CurriculumManager() {
               <div>
                 <h2 className="text-lg font-bold text-slate-950">과목 등록은 관리자 권한이 필요합니다.</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  업로드 파일의 과목명이 목록에 없으면 저장되지 않습니다. 필요한 과목은 관리자에게 등록을 요청하세요.
+                  수동 과목 생성, 수정, 삭제는 관리자만 사용할 수 있습니다. 성취기준 업로드 과정에서는 엑셀 과목명을 기준으로 필요한 과목이 자동 등록됩니다.
                 </p>
               </div>
             </div>
@@ -894,6 +923,11 @@ export function CurriculumManager() {
               <p className="mt-1 text-sm leading-6 text-slate-600">
                 과목명, 교과유형, 학습모듈명, 단원명, 성취기준, 핵심키워드 컬럼을 가진 xlsx, xls, csv 파일을 미리보기 후 저장합니다.
               </p>
+              <div className="mt-3 space-y-1 text-sm leading-6 text-slate-600">
+                <p>엑셀에 입력된 과목명이 아직 등록되어 있지 않으면 자동으로 과목이 생성됩니다.</p>
+                <p>같은 과목명이 여러 행에 반복되어도 과목은 1개만 생성됩니다.</p>
+                <p>같은 과목명에 서로 다른 교과유형이 섞여 있으면 업로드할 수 없습니다.</p>
+              </div>
             </div>
           </div>
           <button className="secondary-button w-full sm:w-auto" type="button" onClick={downloadCurriculumStandardsTemplate}>
@@ -966,7 +1000,7 @@ export function CurriculumManager() {
             <div>
               <h2 className="text-lg font-bold text-slate-950">미리보기 결과</h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                정확 중복은 저장할 수 없고, 유사 중복은 선택한 저장 옵션에 따라 처리됩니다.
+                저장 시 신규 과목은 먼저 자동 등록되고, 정확 중복은 저장하지 않으며 유사 중복은 선택한 저장 옵션에 따라 처리됩니다.
               </p>
             </div>
             <button className="primary-button w-full sm:w-auto" type="button" disabled={!canSaveUpload || isSavingUpload} onClick={saveUploadRows}>
@@ -975,7 +1009,7 @@ export function CurriculumManager() {
             </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-6">
+          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-8">
             {summaryCards(previewSummary).map((item) => (
               <div key={item.label} className="rounded-md border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs font-semibold text-slate-500">{item.label}</p>
@@ -984,9 +1018,13 @@ export function CurriculumManager() {
             ))}
           </div>
 
-          {previewSummary.missingSubjectRows > 0 ? (
-            <p className="mt-4 rounded-md bg-orange-50 p-3 text-sm font-semibold leading-6 text-orange-800">
-              {isAdmin ? "과목 없음 행은 과목을 생성한 뒤 다시 미리보기/저장하세요." : "과목 없음 행은 관리자에게 과목 등록을 요청한 뒤 다시 업로드하세요."}
+          {previewSummary.subjectTypeConflictRows > 0 ? (
+            <p className="mt-4 rounded-md bg-rose-50 p-3 text-sm font-semibold leading-6 text-rose-700">
+              과목 교과유형 충돌이 있어 저장할 수 없습니다. 같은 과목명은 엑셀 안에서 일반교과 또는 NCS교과 중 하나로만 입력하세요.
+            </p>
+          ) : previewSummary.newSubjectRows > 0 ? (
+            <p className="mt-4 rounded-md bg-emerald-50 p-3 text-sm font-semibold leading-6 text-emerald-700">
+              등록되지 않은 과목 {previewSummary.newSubjectRows}개 행은 저장 시 과목을 먼저 자동 등록한 뒤 성취기준과 연결합니다.
             </p>
           ) : null}
 
@@ -1041,7 +1079,7 @@ export function CurriculumManager() {
             <CheckCircle2 className="mt-0.5 text-emerald-700" size={22} aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold text-slate-950">업로드 결과</h2>
-              <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-6">
+              <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
                 {summaryCards(uploadResult).map((item) => (
                   <div key={item.label} className="rounded-md border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold text-slate-500">{item.label}</p>
