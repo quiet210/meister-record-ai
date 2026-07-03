@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Download, FileSpreadsheet, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, UsersRound, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, FileSpreadsheet, Loader2, Pencil, Plus, RefreshCw, Search, Trash2, Upload, UsersRound, X } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type DepartmentOption } from "@/lib/admin-settings";
 import { gradeOptions } from "@/lib/options";
 import { downloadStudentUploadTemplate } from "@/lib/student-template";
@@ -60,6 +60,10 @@ function normalizeDepartment(value: string, departmentOptions: DepartmentOption[
   const compact = normalizeHeader(value);
   const option = departmentOptions.find((item) => normalizeHeader(item.value) === compact || normalizeHeader(item.label) === compact);
   return option?.value || null;
+}
+
+function sortClassNames(values: string[]) {
+  return [...values].sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
 }
 
 async function parseStudentExcelFile(file: File, departmentOptions: DepartmentOption[]) {
@@ -137,6 +141,10 @@ export function StudentManager() {
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [uploadNotes, setUploadNotes] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [gradeFilter, setGradeFilter] = useState<Student["grade"] | "">("");
+  const [classFilter, setClassFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingExcel, setIsUploadingExcel] = useState(false);
@@ -163,6 +171,36 @@ export function StudentManager() {
 
   function departmentLabel(value: Department) {
     return departmentOptions.find((option) => option.value === value)?.label || value;
+  }
+
+  const classOptions = useMemo(() => {
+    const classes = students.map((student) => student.className).filter(Boolean);
+    if (classFilter) classes.push(classFilter);
+
+    return sortClassNames(Array.from(new Set(classes)));
+  }, [classFilter, students]);
+
+  const hasStudentListFilters = Boolean(gradeFilter && classFilter);
+
+  const gradeClassStudents = useMemo(() => {
+    if (!gradeFilter || !classFilter) return [];
+
+    return students.filter((student) => student.grade === gradeFilter && student.className === classFilter);
+  }, [classFilter, gradeFilter, students]);
+
+  const filteredStudents = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return gradeClassStudents
+      .filter((student) => !departmentFilter || student.department === departmentFilter)
+      .filter((student) => !normalizedQuery || student.name.toLowerCase().includes(normalizedQuery));
+  }, [departmentFilter, gradeClassStudents, query]);
+
+  const visibleStudentCount = hasStudentListFilters ? filteredStudents.length : 0;
+
+  function updateGradeFilter(value: Student["grade"] | "") {
+    setGradeFilter(value);
+    setClassFilter("");
   }
 
   async function loadStudents() {
@@ -440,21 +478,70 @@ export function StudentManager() {
       </section>
 
       <section className="panel overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <UsersRound size={18} aria-hidden="true" className="text-slate-500" />
             <h2 className="text-sm font-bold text-slate-900">학생 목록</h2>
           </div>
-          <span className="text-xs font-semibold text-slate-500">{students.length}명</span>
+          <div className="grid grid-cols-2 gap-3 text-xs font-semibold text-slate-500 sm:text-right">
+            <span>선택된 학생 수 {visibleStudentCount}명</span>
+            <span>총 학생 수 {students.length}명</span>
+          </div>
+        </div>
+
+        <div className="border-b border-slate-200 p-4">
+          <div className="flex items-center gap-2">
+            <Search size={17} className="text-blue-700" aria-hidden="true" />
+            <h3 className="text-sm font-bold text-slate-900">목록 필터</h3>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <label className="space-y-2">
+              <span className="field-label">검색</span>
+              <input className="input-base" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="학생 이름" />
+            </label>
+            <label className="space-y-2">
+              <span className="field-label">학년</span>
+              <select className="input-base" value={gradeFilter} onChange={(event) => updateGradeFilter(event.target.value as Student["grade"] | "")}>
+                <option value="">학년 선택</option>
+                {gradeOptions.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="field-label">반</span>
+              <select className="input-base" value={classFilter} onChange={(event) => setClassFilter(event.target.value)} disabled={!gradeFilter}>
+                <option value="">{gradeFilter ? "반 선택" : "학년 먼저 선택"}</option>
+                {classOptions.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="field-label">학과(선택)</span>
+              <select className="input-base" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
+                <option value="">전체</option>
+                {departmentOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
 
         {isLoading ? (
           <div className="p-5 text-sm text-slate-500">학생 목록을 불러오는 중입니다.</div>
-        ) : students.length === 0 ? (
-          <div className="p-5 text-sm leading-6 text-slate-500">등록된 학생이 없습니다. 로그인 상태와 Supabase 테이블/RLS 설정을 확인한 뒤 학생을 추가하세요.</div>
+        ) : !hasStudentListFilters ? (
+          <div className="p-5 text-sm leading-6 text-slate-500">학년과 반을 선택하면 학생 목록이 표시됩니다.</div>
+        ) : gradeClassStudents.length === 0 ? (
+          <div className="p-5 text-sm leading-6 text-slate-500">선택한 학년/반의 학생이 없습니다.</div>
+        ) : filteredStudents.length === 0 ? (
+          <div className="p-5 text-sm leading-6 text-slate-500">검색 또는 학과 조건에 맞는 학생이 없습니다.</div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {students.map((student) => (
+            {filteredStudents.map((student) => (
               <div key={student.id} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-950">{student.name}</p>
