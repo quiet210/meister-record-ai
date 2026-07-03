@@ -14,7 +14,7 @@
 - 학생 CRUD
 - 학생 엑셀 업로드와 템플릿 다운로드
 - 과목 관리
-- 학습모듈 기반 성취기준 엑셀 업로드와 중복 검사
+- 학습모듈 기반 성취기준 엑셀 업로드, 과목 자동 등록, 중복 검사
 - NCS교과 학습모듈 선택 기반 과세특 단일/일괄 생성
 - 과세특 단일 생성
 - 행동특성 및 종합의견 단일 생성
@@ -62,6 +62,8 @@
 - 관리자 과목 관리 화면 제공
 - `curriculum_subjects` 중심의 과목 마스터 관리
 - 과목명, 교과유형, 설명, 정렬순서 관리
+- 성취기준 업로드 시 엑셀 과목명을 기준으로 미등록 과목 자동 등록
+- 엑셀 내 동일 과목 반복 행은 과목 1개로만 자동 등록
 - 과목/성취기준 관리 화면은 전체 목록을 최초부터 펼치지 않고 과목명 검색, 교과유형 필터, 조회 버튼 기반으로 과목을 표시
 - 조회 결과에서 과목별 성취기준 개수와 학습모듈 개수를 확인하고 선택 과목의 성취기준 상세 조회
 - 기존 `subjects` 테이블은 deprecated 호환용으로 유지
@@ -72,10 +74,14 @@
 - 업로드 전 미리보기
 - 학습모듈명 컬럼 지원
 - 핵심키워드 선택 입력 지원
+- 엑셀 과목명 trim, 연속 공백 정리, 대소문자 무시 비교 기반 과목 자동 매칭
+- 미등록 과목은 저장 단계에서 `curriculum_subjects`에 자동 등록
+- 엑셀 내 동일 과목 중복 자동 등록 방지
+- 같은 과목명에 일반교과/NCS교과가 섞인 경우 과목 교과유형 충돌로 차단
 - NCS교과 학습모듈명 누락 권장 경고
 - 학교, 과목, 학습모듈, 단원, 성취기준 기준 정확 중복 검사
 - 동일 과목/학습모듈/단원 내 유사 중복 검사
-- 과목 없음, 오류 행 분리 표시
+- 기존 과목 사용, 신규 과목 자동 등록 예정, 정확 중복, 유사 중복 의심, 과목 교과유형 충돌, 오류 행 분리 표시
 - `curriculum_standards` 저장
 - 선택 과목 기준 성취기준 조회
 - 선택 과목의 성취기준을 학습모듈별로 그룹 표시하고, 학습모듈이 없으면 "학습모듈 없음" 그룹으로 정리
@@ -197,6 +203,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `app/admin/checklists`: 체크리스트 관리
 - `app/api/generate/subject-comment`: 과세특 생성 API
 - `app/api/generate/behavior-comment`: 행동특성 생성 API
+- `app/api/curriculum/upload`: 성취기준 업로드 저장 API, 과목 자동 등록과 성취기준 upsert 처리
 - `app/api/knowledge/upload`: 지식베이스 업로드 API
 
 ### components/
@@ -225,7 +232,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `guardrails.ts`: 생성 payload 검증, 근거 수집, 금지 표현 검사
 - `rag.ts`: OpenAI Vector Store/RAG 업로드와 검색
 - `openai.ts`: OpenAI 기반 생성 보조 경로
-- `curriculum.ts`, `curriculum-server.ts`: 과목/성취기준 조회, 업로드 검증, subject_type 판정, 학습모듈 우선 관련도 기반 선택
+- `curriculum.ts`, `curriculum-server.ts`: 과목/성취기준 조회, 업로드 검증, 과목명 정규화와 자동 등록 저장 호출, subject_type 판정, 학습모듈 우선 관련도 기반 선택
 - `draft-quality.ts`: 생성 결과 유사도 분석
 - `record-drafts.ts`: `record_drafts` 저장, 수정, 최종 확정/해제
 - `student-records.ts`: 학생별 학생부 조회
@@ -250,6 +257,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `migrations/20260630_record_draft_lifecycle.sql`: 학생부 lifecycle 확장
 - `migrations/20260702_curriculum_learning_module.sql`: 성취기준 학습모듈 컬럼과 중복 기준 확장
 - `migrations/20260702_secure_record_drafts_rls.sql`: 학생부 개인 소유 RLS, 사용자 관리 RLS, 생성 API 우회 방지 보강
+- `migrations/20260703_curriculum_upload_auto_subjects.sql`: 성취기준 업로드 upsert용 중복 방지 인덱스와 과목명 정규화 조회 인덱스
 
 ## 4. 주요 화면
 
@@ -308,6 +316,8 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - 과목 선택 시 같은 화면에서 성취기준을 학습모듈별 접기/펼치기 그룹으로 표시
 - 학습모듈명 포함 성취기준 엑셀 업로드
 - 핵심키워드 선택 입력과 NCS교과 학습모듈 권장 경고
+- 업로드 미리보기에서 기존 과목 사용, 신규 과목 자동 등록 예정, 동일 과목 중복, 과목 교과유형 충돌 상태 표시
+- 저장 시 엑셀 과목명을 기준으로 미등록 과목을 먼저 자동 등록하고 성취기준을 저장
 - 학습모듈을 포함한 중복 검사와 업로드 결과 확인
 
 ### 관리자
@@ -384,7 +394,7 @@ AI 원본
 ### 학교 공유 데이터
 
 - `students`: 같은 학교 사용자만 조회, 추가, 수정, 삭제할 수 있습니다.
-- `curriculum_subjects`, `curriculum_standards`: 같은 학교에서 공유하며, 과목 관리는 관리자 중심, 성취기준 업로드/수정은 기존 관리자/업로더 흐름을 유지합니다.
+- `curriculum_subjects`, `curriculum_standards`: 같은 학교에서 공유하며, 수동 과목 관리는 관리자 중심으로 유지합니다. 성취기준 업로드 저장 API는 로그인한 teacher/admin의 학교 ID를 확인한 뒤 업로드 파일에 필요한 과목만 자동 등록합니다.
 - `departments`, `checklist_categories`, `checklist_items`: 같은 학교에서 조회하고 관리자는 같은 학교 설정만 수정합니다.
 
 ### 교사 개인 데이터
@@ -470,6 +480,7 @@ GitHub: https://github.com/quiet210/meister-record-ai
 - 교사별 학생부 draft 분리 완료
 - NCS교과 학습모듈 선택, 과목 변경 시 학습모듈 초기화, 새 과목 기준 학습모듈 목록 재조회 완료
 - 과목 선택 `datalist` 후보가 현재 선택 과목 1개로 좁아 보이던 버그 수정 완료
+- 성취기준 업로드 시 과목 자동 등록, 엑셀 내 동일 과목 중복 등록 방지, 과목명 교과유형 충돌 검증 추가
 
 ## 10. 향후 계획
 
