@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { Check, Clipboard, Eye, Loader2, Lock, RefreshCcw, Save, Unlock, X } from "lucide-react";
 import { getEffectiveRecordContent, getRecordDraftLifecycleStatusMeta } from "@/lib/record-drafts";
 import type { GenerateResponse, RecordDraftLifecycleStatus } from "@/lib/types";
@@ -33,7 +33,7 @@ type BulkDraftLifecycleEditorProps = {
   onUnfinalize: () => void;
 };
 
-export function BulkDraftLifecycleEditor({
+function BulkDraftLifecycleEditorComponent({
   studentInfo,
   statusBadges,
   qualitySelector,
@@ -183,3 +183,5 @@ export function BulkDraftLifecycleEditor({
     </article>
   );
 }
+
+export const BulkDraftLifecycleEditor = memo(BulkDraftLifecycleEditorComponent);

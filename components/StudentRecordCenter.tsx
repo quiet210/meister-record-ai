@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Clipboard,
@@ -28,6 +28,11 @@ import type { CommentMode, GenerateResponse, Student } from "@/lib/types";
 
 type ContentTab = "ai" | "edited" | "final";
 type DraftByMode = Partial<Record<CommentMode, StudentRecordDraft>>;
+type DraftHistoriesByMode = Record<CommentMode, StudentRecordDraft[]>;
+type DraftIndexEntry = {
+  latest: DraftByMode;
+  histories: DraftHistoriesByMode;
+};
 type ActionState = "copy" | "regenerate" | "use-regenerated" | "finalize" | "unfinalize";
 
 const fallbackSettingsOptions = getFallbackSettingsOptions();
@@ -71,12 +76,14 @@ function getRecordKey(studentId: string, mode: CommentMode) {
   return `${studentId}:${mode}`;
 }
 
-function getLatestDraft(drafts: StudentRecordDraft[], studentId: string, mode: CommentMode) {
-  return drafts.find((draft) => draft.studentId === studentId && draft.mode === mode);
-}
-
-function getDraftHistory(drafts: StudentRecordDraft[], studentId: string, mode: CommentMode) {
-  return drafts.filter((draft) => draft.studentId === studentId && draft.mode === mode);
+function makeDraftIndexEntry(): DraftIndexEntry {
+  return {
+    latest: {},
+    histories: {
+      subject: [],
+      behavior: []
+    }
+  };
 }
 
 function buildTimeline(history: StudentRecordDraft[]) {
@@ -166,7 +173,8 @@ export function StudentRecordCenter() {
   }, []);
 
   const departmentOptions = settingsOptions.departmentOptions;
-  const departmentLabel = (value: string) => departmentOptions.find((option) => option.value === value)?.label || value;
+  const departmentLabelMap = useMemo(() => new Map(departmentOptions.map((option) => [option.value, option.label])), [departmentOptions]);
+  const departmentLabel = useCallback((value: string) => departmentLabelMap.get(value) || value, [departmentLabelMap]);
 
   const classOptions = useMemo(() => {
     const classes = students.map((student) => student.className).filter(Boolean);
@@ -184,26 +192,40 @@ export function StudentRecordCenter() {
       .filter((student) => !classFilter || student.className === classFilter);
   }, [classFilter, departmentFilter, gradeFilter, query, students]);
 
+  const draftIndex = useMemo(() => {
+    const index = new Map<string, DraftIndexEntry>();
+
+    drafts.forEach((draft) => {
+      const entry = index.get(draft.studentId) || makeDraftIndexEntry();
+      entry.histories[draft.mode].push(draft);
+      if (!entry.latest[draft.mode]) {
+        entry.latest[draft.mode] = draft;
+      }
+      index.set(draft.studentId, entry);
+    });
+
+    return index;
+  }, [drafts]);
+
+  const finalizedDraftCount = useMemo(() => drafts.filter((draft) => draft.status === "finalized").length, [drafts]);
+
   const selectedStudent = useMemo(
     () => students.find((student) => student.id === selectedStudentId) || filteredStudents[0] || students[0],
     [filteredStudents, selectedStudentId, students]
   );
 
+  const selectedDraftEntry = useMemo(() => (selectedStudent ? draftIndex.get(selectedStudent.id) : undefined), [draftIndex, selectedStudent]);
   const selectedDrafts = useMemo<DraftByMode>(() => {
-    if (!selectedStudent) return {};
-    return {
-      subject: getLatestDraft(drafts, selectedStudent.id, "subject"),
-      behavior: getLatestDraft(drafts, selectedStudent.id, "behavior")
-    };
-  }, [drafts, selectedStudent]);
+    return selectedDraftEntry?.latest || {};
+  }, [selectedDraftEntry]);
 
   const selectedHistories = useMemo(() => {
-    if (!selectedStudent) return { subject: [], behavior: [] } satisfies Record<CommentMode, StudentRecordDraft[]>;
-    return {
-      subject: getDraftHistory(drafts, selectedStudent.id, "subject"),
-      behavior: getDraftHistory(drafts, selectedStudent.id, "behavior")
-    };
-  }, [drafts, selectedStudent]);
+    return selectedDraftEntry?.histories || makeDraftIndexEntry().histories;
+  }, [selectedDraftEntry]);
+
+  const selectStudent = useCallback((studentId: string) => {
+    setSelectedStudentId(studentId);
+  }, []);
 
   function setAction(key: string, state: ActionState | "") {
     setActionStates((current) => ({
@@ -390,7 +412,7 @@ export function StudentRecordCenter() {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-500">최종</p>
-            <p className="mt-1 text-sm font-bold text-emerald-700">{drafts.filter((draft) => draft.status === "finalized").length}</p>
+            <p className="mt-1 text-sm font-bold text-emerald-700">{finalizedDraftCount}</p>
           </div>
         </div>
       </section>
@@ -453,29 +475,18 @@ export function StudentRecordCenter() {
             {!isLoading && filteredStudents.length === 0 ? <div className="p-6 text-center text-sm font-semibold text-slate-500">조건에 맞는 학생이 없습니다.</div> : null}
             {filteredStudents.map((student) => {
               const selected = selectedStudent?.id === student.id;
-              const subjectDraft = getLatestDraft(drafts, student.id, "subject");
-              const behaviorDraft = getLatestDraft(drafts, student.id, "behavior");
+              const latestDrafts = draftIndex.get(student.id)?.latest;
 
               return (
-                <button
+                <StudentRecordListItem
                   key={student.id}
-                  type="button"
-                  onClick={() => setSelectedStudentId(student.id)}
-                  className={`mb-2 w-full rounded-md border p-3 text-left transition ${
-                    selected ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <p className="font-bold text-slate-950">
-                    {student.className} {student.number}번 {student.name}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {student.grade} · {departmentLabel(student.department)}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <MiniStatusBadge label="과세특" status={subjectDraft?.status} />
-                    <MiniStatusBadge label="행특" status={behaviorDraft?.status} />
-                  </div>
-                </button>
+                  student={student}
+                  selected={selected}
+                  departmentName={departmentLabel(student.department)}
+                  subjectStatus={latestDrafts?.subject?.status}
+                  behaviorStatus={latestDrafts?.behavior?.status}
+                  onSelect={selectStudent}
+                />
               );
             })}
           </div>
@@ -551,6 +562,45 @@ export function StudentRecordCenter() {
   );
 }
 
+type StudentRecordListItemProps = {
+  student: Student;
+  selected: boolean;
+  departmentName: string;
+  subjectStatus?: string;
+  behaviorStatus?: string;
+  onSelect: (studentId: string) => void;
+};
+
+const StudentRecordListItem = memo(function StudentRecordListItem({
+  student,
+  selected,
+  departmentName,
+  subjectStatus,
+  behaviorStatus,
+  onSelect
+}: StudentRecordListItemProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(student.id)}
+      className={`mb-2 w-full rounded-md border p-3 text-left transition ${
+        selected ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"
+      }`}
+    >
+      <p className="font-bold text-slate-950">
+        {student.className} {student.number}번 {student.name}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        {student.grade} · {departmentName}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <MiniStatusBadge label="과세특" status={subjectStatus} />
+        <MiniStatusBadge label="행특" status={behaviorStatus} />
+      </div>
+    </button>
+  );
+});
+
 function MiniStatusBadge({ label, status }: { label: string; status?: string }) {
   const normalizedStatus = status === "editing" || status === "saved" || status === "finalized" ? status : "ai_generated";
   const meta = getRecordDraftLifecycleStatusMeta(normalizedStatus);
@@ -611,7 +661,7 @@ function RecordModeCard({
       })
     : "";
   const activeContent = draft ? getTabContent(draft, activeTab) : "";
-  const timeline = buildTimeline(history);
+  const timeline = useMemo(() => buildTimeline(history), [history]);
   const isFinalized = draft?.status === "finalized";
   const canRegenerate = Boolean(draft?.inputPayload && !isFinalized);
   const canFinalize = Boolean(draft?.inputPayload && effectiveContent && !isFinalized);

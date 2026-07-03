@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw, Search, Sparkles, UsersRound } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
@@ -81,6 +81,8 @@ function makeInitialStudentInput(): StudentSubjectInput {
   };
 }
 
+const emptyStudentSubjectInput = makeInitialStudentInput();
+
 function makeInitialBulkInput(): BulkApplyInput {
   return {
     activityTypes: [],
@@ -149,6 +151,13 @@ async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T
   );
 }
 
+function useStableCallback<TArgs extends unknown[], TReturn>(callback: (...args: TArgs) => TReturn) {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  return useCallback((...args: TArgs) => callbackRef.current(...args), []);
+}
+
 type ChipSelectorProps = {
   label: string;
   options: readonly string[];
@@ -196,6 +205,274 @@ function ChipSelector({ label, options, values, onChange, disabled = false, comp
     </fieldset>
   );
 }
+
+type BulkSubjectStudentRowProps = {
+  student: Student;
+  input: StudentSubjectInput;
+  departmentName: string;
+  selected: boolean;
+  isGenerating: boolean;
+  hasSubjectName: boolean;
+  activityOptions: readonly string[];
+  competencyOptions: readonly string[];
+  improvementOptions: readonly string[];
+  onToggleStudent: (studentId: string) => void;
+  onPatchInput: (studentId: string, patch: Partial<StudentSubjectInput>, resetResult?: boolean) => void;
+  onCopyPrevious: (studentId: string) => void;
+  onGenerate: (student: Student) => void;
+};
+
+const BulkSubjectStudentRow = memo(function BulkSubjectStudentRow({
+  student,
+  input,
+  departmentName,
+  selected,
+  isGenerating,
+  hasSubjectName,
+  activityOptions,
+  competencyOptions,
+  improvementOptions,
+  onToggleStudent,
+  onPatchInput,
+  onCopyPrevious,
+  onGenerate
+}: BulkSubjectStudentRowProps) {
+  const statusMeta = getStatusMeta(input.status);
+  const lifecycleMeta = getRecordDraftLifecycleStatusMeta(input.lifecycleStatus);
+  const warnings = getStudentWarnings(input);
+  const isRowGenerating = input.status === "generating" || input.status === "queued";
+  const rowReady = isStudentReady(input);
+  const rowCompleted = input.status === "completed";
+  const rowFinalized = input.lifecycleStatus === "finalized";
+
+  return (
+    <tr className={`align-top ${selected ? "bg-blue-50/30" : ""}`}>
+      <td className="px-3 py-3">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4"
+          checked={selected}
+          onChange={() => onToggleStudent(student.id)}
+          disabled={isGenerating}
+          aria-label={`${student.name} 선택`}
+        />
+      </td>
+      <td className="px-3 py-3">
+        <p className="font-bold text-slate-950">
+          {student.className} {student.number}번 {student.name}
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          {student.grade} · {departmentName}
+        </p>
+        {warnings.length > 0 ? (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold leading-5 text-amber-900">
+            <AlertTriangle className="mr-1 inline" size={13} aria-hidden="true" />
+            필요: {warnings.join(", ")}
+          </div>
+        ) : (
+          <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs font-semibold text-emerald-700">
+            <CheckCircle2 className="mr-1 inline" size={13} aria-hidden="true" />
+            생성 가능
+          </div>
+        )}
+      </td>
+      <td className="px-3 py-3">
+        <ChipSelector
+          label="활동유형"
+          options={activityOptions}
+          values={input.activityTypes}
+          onChange={(values) => onPatchInput(student.id, { activityTypes: values })}
+          disabled={isRowGenerating}
+          compact
+          showLabel={false}
+        />
+      </td>
+      <td className="px-3 py-3">
+        <ChipSelector
+          label="역량키워드"
+          options={competencyOptions}
+          values={input.competencies}
+          onChange={(values) => onPatchInput(student.id, { competencies: values })}
+          disabled={isRowGenerating}
+          compact
+          showLabel={false}
+        />
+      </td>
+      <td className="px-3 py-3">
+        <ChipSelector
+          label="보완점"
+          options={improvementOptions}
+          values={input.improvements}
+          onChange={(values) => onPatchInput(student.id, { improvements: values })}
+          disabled={isRowGenerating}
+          compact
+          showLabel={false}
+        />
+      </td>
+      <td className="px-3 py-3">
+        <textarea
+          className="input-base min-h-28 resize-y leading-6"
+          placeholder="학생별 관찰 내용을 입력하세요."
+          value={input.observationMemo}
+          onChange={(event) => onPatchInput(student.id, { observationMemo: event.target.value })}
+          disabled={isRowGenerating}
+        />
+      </td>
+      <td className="px-3 py-3">
+        <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>
+          {input.status === "generating" ? <Loader2 className="mr-1 animate-spin" size={13} aria-hidden="true" /> : null}
+          {statusMeta.label}
+        </span>
+        {input.result?.draft ? (
+          <span className={`mt-2 inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${lifecycleMeta.className}`}>
+            <span className={`mr-1 h-2 w-2 rounded-full ${lifecycleMeta.dotClassName}`} aria-hidden="true" />
+            {lifecycleMeta.label}
+          </span>
+        ) : null}
+        {input.savedMessage ? <p className="mt-2 text-xs font-semibold text-emerald-700">{input.savedMessage}</p> : null}
+      </td>
+      <td className="px-3 py-3">
+        <div className="grid gap-2">
+          <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => onCopyPrevious(student.id)} disabled={isGenerating}>
+            <Copy size={15} aria-hidden="true" />
+            이전 복사
+          </button>
+          <button
+            className="secondary-button min-h-10 px-3 py-1.5"
+            type="button"
+            onClick={() => onGenerate(student)}
+            disabled={isGenerating || !hasSubjectName || !rowReady || rowCompleted || rowFinalized}
+          >
+            <Play size={15} aria-hidden="true" />
+            {input.status === "failed" ? "재생성" : rowCompleted ? "완료" : "개별 생성"}
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+type BulkSubjectResultCardProps = {
+  student: Student;
+  input: StudentSubjectInput;
+  departmentName: string;
+  isGenerating: boolean;
+  hasSubjectName: boolean;
+  includeFinalizedInRegeneration: boolean;
+  qualityChecked: boolean;
+  onToggleQualitySelection: (studentId: string) => void;
+  onEditedContentChange: (studentId: string, value: string) => void;
+  onSave: (student: Student) => void;
+  onCopy: (studentId: string) => void;
+  onToggleCompare: (studentId: string, showCompare: boolean) => void;
+  onRegenerate: (student: Student) => void;
+  onKeepCurrentDraft: (studentId: string) => void;
+  onUseRegeneratedDraft: (student: Student) => void;
+  onFinalize: (student: Student) => void;
+  onUnfinalize: (student: Student) => void;
+};
+
+const BulkSubjectResultCard = memo(function BulkSubjectResultCard({
+  student,
+  input,
+  departmentName,
+  isGenerating,
+  hasSubjectName,
+  includeFinalizedInRegeneration,
+  qualityChecked,
+  onToggleQualitySelection,
+  onEditedContentChange,
+  onSave,
+  onCopy,
+  onToggleCompare,
+  onRegenerate,
+  onKeepCurrentDraft,
+  onUseRegeneratedDraft,
+  onFinalize,
+  onUnfinalize
+}: BulkSubjectResultCardProps) {
+  const statusMeta = getStatusMeta(input.status);
+  const effectiveDraft = getEffectiveRecordContent({
+    finalContent: input.finalContent,
+    editedContent: input.editedContent,
+    aiContent: input.aiContent,
+    draftText: input.result?.draft
+  });
+  const hasDraft = effectiveDraft.length > 0;
+  const qualityMeta = getDraftSimilarityStatusMeta(input.quality?.status);
+  const qualityPercentage = input.quality ? `${input.quality.percentage}%` : "-";
+  const isDuplicateQuality = input.quality?.status === "duplicate" && hasDraft;
+  const qualitySelectable = isDuplicateQuality && (includeFinalizedInRegeneration || input.lifecycleStatus !== "finalized");
+  const canRegenerate =
+    (includeFinalizedInRegeneration || input.lifecycleStatus !== "finalized") &&
+    !isGenerating &&
+    !input.isRegenerating &&
+    !["queued", "generating"].includes(input.status) &&
+    (hasDraft || input.status === "failed") &&
+    isStudentReady(input);
+
+  return (
+    <BulkDraftLifecycleEditor
+      studentInfo={
+        <>
+          <p className="font-bold text-slate-950">
+            {student.className} {student.number}번 {student.name}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {student.grade} · {departmentName}
+          </p>
+          {input.quality?.matchedStudentName ? <p className="mt-2 text-xs font-semibold text-slate-500">가장 유사: {input.quality.matchedStudentName}</p> : null}
+        </>
+      }
+      statusBadges={
+        <>
+          <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>생성 {statusMeta.label}</span>
+          <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${qualityMeta.className}`}>
+            유사도 {qualityPercentage} · {qualityMeta.label}
+          </span>
+        </>
+      }
+      qualitySelector={
+        <label
+          className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold ${
+            isDuplicateQuality ? "border-rose-200 bg-rose-50 text-rose-800" : "border-slate-200 bg-slate-50 text-slate-500"
+          }`}
+        >
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={qualitySelectable && qualityChecked}
+            onChange={() => onToggleQualitySelection(student.id)}
+            disabled={!qualitySelectable || isGenerating}
+          />
+          중복 의심 선택
+        </label>
+      }
+      aiContent={input.aiContent}
+      editedContent={input.editedContent}
+      finalContent={input.finalContent}
+      draftText={input.result?.draft}
+      lifecycleStatus={input.lifecycleStatus}
+      error={input.error}
+      warnings={input.result?.warnings}
+      savedMessage={input.savedMessage}
+      pendingRegeneration={input.pendingRegeneration}
+      showCompare={input.showCompare}
+      isSaving={input.isSavingDraft}
+      isRegenerating={input.isRegenerating}
+      canRegenerate={canRegenerate && hasSubjectName}
+      onEditedContentChange={(value) => onEditedContentChange(student.id, value)}
+      onSave={() => onSave(student)}
+      onCopy={() => onCopy(student.id)}
+      onToggleCompare={() => onToggleCompare(student.id, !input.showCompare)}
+      onRegenerate={() => onRegenerate(student)}
+      onKeepCurrentDraft={() => onKeepCurrentDraft(student.id)}
+      onUseRegeneratedDraft={() => onUseRegeneratedDraft(student)}
+      onFinalize={() => onFinalize(student)}
+      onUnfinalize={() => onUnfinalize(student)}
+    />
+  );
+});
 
 export function BulkSubjectCommentComposer() {
   const [settingsOptions, setSettingsOptions] = useState<SettingsOptions>(() => fallbackSettingsOptions);
@@ -266,8 +543,11 @@ export function BulkSubjectCommentComposer() {
     [settingsOptions.subjectChecklistGroups]
   );
   const departmentOptions = settingsOptions.departmentOptions;
+  const subjectImprovementOptions = settingsOptions.subjectImprovementOptions;
+  const departmentLabelMap = useMemo(() => new Map(departmentOptions.map((option) => [option.value, option.label])), [departmentOptions]);
   const selectedStudentIdSet = useMemo(() => new Set(selectedStudentIds), [selectedStudentIds]);
   const qualitySelectedStudentIdSet = useMemo(() => new Set(qualitySelectedStudentIds), [qualitySelectedStudentIds]);
+  const hasSubjectName = subjectName.trim().length > 0;
 
   const classOptions = useMemo(() => {
     const classes = students.map((student) => student.className).filter(Boolean);
@@ -285,6 +565,30 @@ export function BulkSubjectCommentComposer() {
   );
 
   const selectedStudents = useMemo(() => students.filter((student) => selectedStudentIdSet.has(student.id)), [selectedStudentIdSet, students]);
+  const selectedInputStats = useMemo(() => {
+    const counts: Record<BulkStatus, number> = {
+      waiting: 0,
+      queued: 0,
+      generating: 0,
+      completed: 0,
+      failed: 0
+    };
+    let hasRunningStudent = false;
+    let readyCount = 0;
+
+    selectedStudents.forEach((student) => {
+      const input = studentInputs[student.id] || emptyStudentSubjectInput;
+      counts[input.status] += 1;
+      if (input.status === "queued" || input.status === "generating") hasRunningStudent = true;
+      if (input.status !== "completed" && input.lifecycleStatus !== "finalized" && isStudentReady(input)) readyCount += 1;
+    });
+
+    return {
+      statusCounts: counts,
+      isGenerating: hasRunningStudent,
+      readySelectedCount: readyCount
+    };
+  }, [selectedStudents, studentInputs]);
   const failedStudents = useMemo(
     () =>
       selectedStudents.filter((student) => {
@@ -314,32 +618,16 @@ export function BulkSubjectCommentComposer() {
     () => duplicateQualityStudents.filter((student) => qualitySelectedStudentIdSet.has(student.id)),
     [duplicateQualityStudents, qualitySelectedStudentIdSet]
   );
-  const isGenerating = selectedStudents.some((student) => ["queued", "generating"].includes(studentInputs[student.id]?.status || "waiting"));
-  const allFilteredSelected = filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id));
-  const readySelectedCount = selectedStudents.filter((student) => {
-    const input = studentInputs[student.id] || makeInitialStudentInput();
-    return input.status !== "completed" && input.lifecycleStatus !== "finalized" && isStudentReady(input);
-  }).length;
-  const canGenerate = Boolean(subjectName.trim()) && readySelectedCount > 0 && !isGenerating;
-
-  const statusCounts = selectedStudents.reduce(
-    (counts, student) => {
-      const status = studentInputs[student.id]?.status || "waiting";
-      counts[status] += 1;
-      return counts;
-    },
-    {
-      waiting: 0,
-      queued: 0,
-      generating: 0,
-      completed: 0,
-      failed: 0
-    } satisfies Record<BulkStatus, number>
+  const { statusCounts, isGenerating, readySelectedCount } = selectedInputStats;
+  const allFilteredSelected = useMemo(
+    () => filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id)),
+    [filteredStudents, selectedStudentIdSet]
   );
+  const canGenerate = hasSubjectName && readySelectedCount > 0 && !isGenerating;
   const subjectResultExportRows = useMemo<SubjectCommentResultExportRow[]>(
     () =>
       selectedStudents.flatMap((student) => {
-        const input = studentInputs[student.id] || makeInitialStudentInput();
+        const input = studentInputs[student.id] || emptyStudentSubjectInput;
         if (input.status !== "completed" && input.status !== "failed") return [];
 
         const effectiveDraft = getEffectiveRecordContent({
@@ -357,7 +645,7 @@ export function BulkSubjectCommentComposer() {
             className: student.className,
             number: student.number,
             name: student.name,
-            department: departmentOptions.find((option) => option.value === student.department)?.label || student.department,
+            department: departmentLabelMap.get(student.department) || student.department,
             subjectName,
             unit,
             draft: hasCompletedDraft ? effectiveDraft : "",
@@ -367,15 +655,18 @@ export function BulkSubjectCommentComposer() {
           }
         ];
       }),
-    [departmentOptions, selectedStudents, studentInputs, subjectName, unit]
+    [departmentLabelMap, selectedStudents, studentInputs, subjectName, unit]
   );
-  const completedExportResultCount = subjectResultExportRows.filter((row) => row.generationStatus === "completed" && row.draft.trim().length > 0).length;
+  const completedExportResultCount = useMemo(
+    () => subjectResultExportRows.filter((row) => row.generationStatus === "completed" && row.draft.trim().length > 0).length,
+    [subjectResultExportRows]
+  );
 
   function departmentLabel(value: string) {
-    return departmentOptions.find((option) => option.value === value)?.label || value;
+    return departmentLabelMap.get(value) || value;
   }
 
-  function patchStudentInput(studentId: string, patch: Partial<StudentSubjectInput>, resetResult = true) {
+  const patchStudentInput = useCallback((studentId: string, patch: Partial<StudentSubjectInput>, resetResult = true) => {
     setStudentInputs((current) => {
       const previous = current[studentId] || makeInitialStudentInput();
       return {
@@ -404,13 +695,13 @@ export function BulkSubjectCommentComposer() {
         }
       };
     });
-  }
+  }, []);
 
-  function toggleStudent(studentId: string) {
+  const toggleStudent = useCallback((studentId: string) => {
     setSelectedStudentIds((current) => (current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]));
-  }
+  }, []);
 
-  function toggleFilteredStudents() {
+  const toggleFilteredStudents = useCallback(() => {
     if (allFilteredSelected) {
       const filteredIds = new Set(filteredStudents.map((student) => student.id));
       setSelectedStudentIds((current) => current.filter((id) => !filteredIds.has(id)));
@@ -418,18 +709,18 @@ export function BulkSubjectCommentComposer() {
     }
 
     setSelectedStudentIds((current) => Array.from(new Set([...current, ...filteredStudents.map((student) => student.id)])));
-  }
+  }, [allFilteredSelected, filteredStudents]);
 
-  function clearSelection() {
+  const clearSelection = useCallback(() => {
     setSelectedStudentIds([]);
-  }
+  }, []);
 
-  function updateBulkInput(patch: Partial<BulkApplyInput>) {
+  const updateBulkInput = useCallback((patch: Partial<BulkApplyInput>) => {
     setBulkInput((current) => ({
       ...current,
       ...patch
     }));
-  }
+  }, []);
 
   function applyBulkInputToSelected() {
     if (selectedStudentIds.length === 0) {
@@ -788,7 +1079,7 @@ export function BulkSubjectCommentComposer() {
     await generateForStudents(failedStudents, { includeFinalized: includeFinalizedInRegeneration });
   }
 
-  function updateEditedContent(studentId: string, value: string) {
+  const updateEditedContent = useCallback((studentId: string, value: string) => {
     setStudentInputs((current) => {
       const previous = current[studentId] || makeInitialStudentInput();
       return {
@@ -803,7 +1094,7 @@ export function BulkSubjectCommentComposer() {
         }
       };
     });
-  }
+  }, []);
 
   async function saveEditedDraftForStudent(student: Student, source: "manual" | "auto" = "manual") {
     const input = studentInputs[student.id] || makeInitialStudentInput();
@@ -1154,6 +1445,37 @@ export function BulkSubjectCommentComposer() {
     }
   }
 
+  const handleCopyPreviousStudentValues = useStableCallback(copyPreviousStudentValues);
+  const handleGenerateSingleStudent = useStableCallback((student: Student) => {
+    void generateSingleStudent(student);
+  });
+  const handleToggleQualitySelection = useStableCallback(toggleQualitySelection);
+  const handleSaveEditedDraftForStudent = useStableCallback((student: Student) => {
+    void saveEditedDraftForStudent(student);
+  });
+  const handleCopyDraft = useStableCallback((studentId: string) => {
+    void copyDraft(studentId);
+  });
+  const handleToggleCompare = useCallback(
+    (studentId: string, showCompare: boolean) => {
+      patchStudentInput(studentId, { showCompare }, false);
+    },
+    [patchStudentInput]
+  );
+  const handleRegenerateSingleStudent = useStableCallback((student: Student) => {
+    void regenerateSingleStudent(student);
+  });
+  const handleKeepCurrentDraftForStudent = useStableCallback(keepCurrentDraftForStudent);
+  const handleUseRegeneratedDraftForStudent = useStableCallback((student: Student) => {
+    void useRegeneratedDraftForStudent(student);
+  });
+  const handleFinalizeDraftForStudent = useStableCallback((student: Student) => {
+    void finalizeDraftForStudent(student);
+  });
+  const handleUnfinalizeDraftForStudent = useStableCallback((student: Student) => {
+    void unfinalizeDraftForStudent(student);
+  });
+
   useEffect(() => {
     const dirtyStudents = students.filter((student) => {
       const input = studentInputs[student.id];
@@ -1344,16 +1666,16 @@ export function BulkSubjectCommentComposer() {
               {isGenerating ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <Sparkles size={18} aria-hidden="true" />}
               선택 학생 생성
             </button>
-            <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={failedStudents.length === 0 || isGenerating || !subjectName.trim()}>
+            <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={failedStudents.length === 0 || isGenerating || !hasSubjectName}>
               <RefreshCcw size={17} aria-hidden="true" />
               실패만 재생성
             </button>
           </div>
         </div>
 
-        {!subjectName.trim() || selectedStudents.length === 0 ? (
+        {!hasSubjectName || selectedStudents.length === 0 ? (
           <div className="border-b border-slate-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-900">
-            {!subjectName.trim() ? "과목명을 입력하세요. " : ""}
+            {!hasSubjectName ? "과목명을 입력하세요. " : ""}
             {selectedStudents.length === 0 ? "생성할 학생을 선택하세요." : ""}
           </div>
         ) : null}
@@ -1390,123 +1712,24 @@ export function BulkSubjectCommentComposer() {
                   </td>
                 </tr>
               ) : null}
-              {filteredStudents.map((student) => {
-                const input = studentInputs[student.id] || makeInitialStudentInput();
-                const statusMeta = getStatusMeta(input.status);
-                const lifecycleMeta = getRecordDraftLifecycleStatusMeta(input.lifecycleStatus);
-                const warnings = getStudentWarnings(input);
-                const isRowGenerating = input.status === "generating" || input.status === "queued";
-                const selected = selectedStudentIdSet.has(student.id);
-                const rowReady = isStudentReady(input);
-                const rowCompleted = input.status === "completed";
-                const rowFinalized = input.lifecycleStatus === "finalized";
-
-                return (
-                  <tr key={student.id} className={`align-top ${selected ? "bg-blue-50/30" : ""}`}>
-                    <td className="px-3 py-3">
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4"
-                        checked={selected}
-                        onChange={() => toggleStudent(student.id)}
-                        disabled={isGenerating}
-                        aria-label={`${student.name} 선택`}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <p className="font-bold text-slate-950">
-                        {student.className} {student.number}번 {student.name}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {student.grade} · {departmentLabel(student.department)}
-                      </p>
-                      {warnings.length > 0 ? (
-                        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold leading-5 text-amber-900">
-                          <AlertTriangle className="mr-1 inline" size={13} aria-hidden="true" />
-                          필요: {warnings.join(", ")}
-                        </div>
-                      ) : (
-                        <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs font-semibold text-emerald-700">
-                          <CheckCircle2 className="mr-1 inline" size={13} aria-hidden="true" />
-                          생성 가능
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
-                      <ChipSelector
-                        label="활동유형"
-                        options={activityOptions}
-                        values={input.activityTypes}
-                        onChange={(values) => patchStudentInput(student.id, { activityTypes: values })}
-                        disabled={isRowGenerating}
-                        compact
-                        showLabel={false}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <ChipSelector
-                        label="역량키워드"
-                        options={competencyOptions}
-                        values={input.competencies}
-                        onChange={(values) => patchStudentInput(student.id, { competencies: values })}
-                        disabled={isRowGenerating}
-                        compact
-                        showLabel={false}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <ChipSelector
-                        label="보완점"
-                        options={settingsOptions.subjectImprovementOptions}
-                        values={input.improvements}
-                        onChange={(values) => patchStudentInput(student.id, { improvements: values })}
-                        disabled={isRowGenerating}
-                        compact
-                        showLabel={false}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <textarea
-                        className="input-base min-h-28 resize-y leading-6"
-                        placeholder="학생별 관찰 내용을 입력하세요."
-                        value={input.observationMemo}
-                        onChange={(event) => patchStudentInput(student.id, { observationMemo: event.target.value })}
-                        disabled={isRowGenerating}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>
-                        {input.status === "generating" ? <Loader2 className="mr-1 animate-spin" size={13} aria-hidden="true" /> : null}
-                        {statusMeta.label}
-                      </span>
-                      {input.result?.draft ? (
-                        <span className={`mt-2 inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${lifecycleMeta.className}`}>
-                          <span className={`mr-1 h-2 w-2 rounded-full ${lifecycleMeta.dotClassName}`} aria-hidden="true" />
-                          {lifecycleMeta.label}
-                        </span>
-                      ) : null}
-                      {input.savedMessage ? <p className="mt-2 text-xs font-semibold text-emerald-700">{input.savedMessage}</p> : null}
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="grid gap-2">
-                        <button className="secondary-button min-h-10 px-3 py-1.5" type="button" onClick={() => copyPreviousStudentValues(student.id)} disabled={isGenerating}>
-                          <Copy size={15} aria-hidden="true" />
-                          이전 복사
-                        </button>
-                        <button
-                          className="secondary-button min-h-10 px-3 py-1.5"
-                          type="button"
-                          onClick={() => generateSingleStudent(student)}
-                          disabled={isGenerating || !subjectName.trim() || !rowReady || rowCompleted || rowFinalized}
-                        >
-                          <Play size={15} aria-hidden="true" />
-                          {input.status === "failed" ? "재생성" : rowCompleted ? "완료" : "개별 생성"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filteredStudents.map((student) => (
+                <BulkSubjectStudentRow
+                  key={student.id}
+                  student={student}
+                  input={studentInputs[student.id] || emptyStudentSubjectInput}
+                  departmentName={departmentLabel(student.department)}
+                  selected={selectedStudentIdSet.has(student.id)}
+                  isGenerating={isGenerating}
+                  hasSubjectName={hasSubjectName}
+                  activityOptions={activityOptions}
+                  competencyOptions={competencyOptions}
+                  improvementOptions={subjectImprovementOptions}
+                  onToggleStudent={toggleStudent}
+                  onPatchInput={patchStudentInput}
+                  onCopyPrevious={handleCopyPreviousStudentValues}
+                  onGenerate={handleGenerateSingleStudent}
+                />
+              ))}
             </tbody>
           </table>
         </div>
@@ -1529,7 +1752,7 @@ export function BulkSubjectCommentComposer() {
                 className="primary-button"
                 type="button"
                 onClick={regenerateQualitySelectedStudents}
-                disabled={qualityRegenerationStudents.length === 0 || isGenerating || !subjectName.trim()}
+                disabled={qualityRegenerationStudents.length === 0 || isGenerating || !hasSubjectName}
               >
                 <RefreshCcw size={17} aria-hidden="true" />
                 중복 의심 학생만 재생성
@@ -1565,92 +1788,28 @@ export function BulkSubjectCommentComposer() {
           <div className="p-5 text-sm font-semibold text-slate-500">학생을 선택하면 생성 결과가 표시됩니다.</div>
         ) : (
           <div className="divide-y divide-slate-200">
-            {selectedStudents.map((student) => {
-              const input = studentInputs[student.id] || makeInitialStudentInput();
-              const statusMeta = getStatusMeta(input.status);
-              const effectiveDraft = getEffectiveRecordContent({
-                finalContent: input.finalContent,
-                editedContent: input.editedContent,
-                aiContent: input.aiContent,
-                draftText: input.result?.draft
-              });
-              const hasDraft = effectiveDraft.length > 0;
-              const qualityMeta = getDraftSimilarityStatusMeta(input.quality?.status);
-              const qualityPercentage = input.quality ? `${input.quality.percentage}%` : "-";
-              const isDuplicateQuality = input.quality?.status === "duplicate" && hasDraft;
-              const qualitySelectable = isDuplicateQuality && (includeFinalizedInRegeneration || input.lifecycleStatus !== "finalized");
-              const qualityChecked = qualitySelectable && qualitySelectedStudentIdSet.has(student.id);
-              const canRegenerate =
-                (includeFinalizedInRegeneration || input.lifecycleStatus !== "finalized") &&
-                !isGenerating &&
-                !input.isRegenerating &&
-                !["queued", "generating"].includes(input.status) &&
-                (hasDraft || input.status === "failed") &&
-                isStudentReady(input);
-
-              return (
-                <BulkDraftLifecycleEditor
-                  key={student.id}
-                  studentInfo={
-                    <>
-                      <p className="font-bold text-slate-950">
-                        {student.className} {student.number}번 {student.name}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {student.grade} · {departmentLabel(student.department)}
-                      </p>
-                      {input.quality?.matchedStudentName ? <p className="mt-2 text-xs font-semibold text-slate-500">가장 유사: {input.quality.matchedStudentName}</p> : null}
-                    </>
-                  }
-                  statusBadges={
-                    <>
-                      <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>생성 {statusMeta.label}</span>
-                      <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${qualityMeta.className}`}>
-                        유사도 {qualityPercentage} · {qualityMeta.label}
-                      </span>
-                    </>
-                  }
-                  qualitySelector={
-                    <label
-                      className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold ${
-                        isDuplicateQuality ? "border-rose-200 bg-rose-50 text-rose-800" : "border-slate-200 bg-slate-50 text-slate-500"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4"
-                        checked={qualityChecked}
-                        onChange={() => toggleQualitySelection(student.id)}
-                        disabled={!qualitySelectable || isGenerating}
-                      />
-                      중복 의심 선택
-                    </label>
-                  }
-                  aiContent={input.aiContent}
-                  editedContent={input.editedContent}
-                  finalContent={input.finalContent}
-                  draftText={input.result?.draft}
-                  lifecycleStatus={input.lifecycleStatus}
-                  error={input.error}
-                  warnings={input.result?.warnings}
-                  savedMessage={input.savedMessage}
-                  pendingRegeneration={input.pendingRegeneration}
-                  showCompare={input.showCompare}
-                  isSaving={input.isSavingDraft}
-                  isRegenerating={input.isRegenerating}
-                  canRegenerate={canRegenerate && Boolean(subjectName.trim())}
-                  onEditedContentChange={(value) => updateEditedContent(student.id, value)}
-                  onSave={() => void saveEditedDraftForStudent(student)}
-                  onCopy={() => void copyDraft(student.id)}
-                  onToggleCompare={() => patchStudentInput(student.id, { showCompare: !input.showCompare }, false)}
-                  onRegenerate={() => void regenerateSingleStudent(student)}
-                  onKeepCurrentDraft={() => keepCurrentDraftForStudent(student.id)}
-                  onUseRegeneratedDraft={() => void useRegeneratedDraftForStudent(student)}
-                  onFinalize={() => void finalizeDraftForStudent(student)}
-                  onUnfinalize={() => void unfinalizeDraftForStudent(student)}
-                />
-              );
-            })}
+            {selectedStudents.map((student) => (
+              <BulkSubjectResultCard
+                key={student.id}
+                student={student}
+                input={studentInputs[student.id] || emptyStudentSubjectInput}
+                departmentName={departmentLabel(student.department)}
+                isGenerating={isGenerating}
+                hasSubjectName={hasSubjectName}
+                includeFinalizedInRegeneration={includeFinalizedInRegeneration}
+                qualityChecked={qualitySelectedStudentIdSet.has(student.id)}
+                onToggleQualitySelection={handleToggleQualitySelection}
+                onEditedContentChange={updateEditedContent}
+                onSave={handleSaveEditedDraftForStudent}
+                onCopy={handleCopyDraft}
+                onToggleCompare={handleToggleCompare}
+                onRegenerate={handleRegenerateSingleStudent}
+                onKeepCurrentDraft={handleKeepCurrentDraftForStudent}
+                onUseRegeneratedDraft={handleUseRegeneratedDraftForStudent}
+                onFinalize={handleFinalizeDraftForStudent}
+                onUnfinalize={handleUnfinalizeDraftForStudent}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -1689,7 +1848,7 @@ export function BulkSubjectCommentComposer() {
           />
           <ChipSelector
             label="보완점"
-            options={settingsOptions.subjectImprovementOptions}
+            options={subjectImprovementOptions}
             values={bulkInput.improvements}
             onChange={(values) => updateBulkInput({ improvements: values })}
             disabled={isGenerating}
