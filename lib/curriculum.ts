@@ -44,11 +44,19 @@ export type CurriculumUploadRawRow = {
   keywords: string;
 };
 
-export type CurriculumUploadRowStatus = "valid" | "error" | "exact_duplicate" | "similar_duplicate" | "missing_subject";
+export type CurriculumUploadRowStatus =
+  | "valid"
+  | "existing_subject"
+  | "new_subject"
+  | "exact_duplicate"
+  | "similar_duplicate"
+  | "subject_type_conflict"
+  | "error";
 
 export type CurriculumUploadPreviewRow = CurriculumUploadRawRow & {
   subjectId?: string;
   subjectType?: CurriculumSubjectType;
+  normalizedSubjectName: string;
   status: CurriculumUploadRowStatus;
   messages: string[];
   similarMatches: string[];
@@ -59,16 +67,18 @@ export type CurriculumUploadPreviewRow = CurriculumUploadRawRow & {
 export type CurriculumUploadSummary = {
   totalRows: number;
   newRows: number;
+  existingSubjectRows: number;
+  newSubjectRows: number;
   exactDuplicateRows: number;
   similarDuplicateRows: number;
+  subjectTypeConflictRows: number;
   errorRows: number;
-  missingSubjectRows: number;
 };
 
 export type CurriculumUploadSaveOption = "new_only" | "include_similar";
 
 export type CreateCurriculumStandardInput = {
-  subjectId: string;
+  subjectId?: string;
   subjectName: string;
   subjectType: CurriculumSubjectType;
   learningModule: string;
@@ -77,6 +87,14 @@ export type CreateCurriculumStandardInput = {
   keywords: string;
   duplicateStatus: string;
   sortOrder: number;
+};
+
+export type SaveCurriculumUploadResult = {
+  savedRows: number;
+  createdSubjectCount: number;
+  reusedSubjectCount: number;
+  skippedDuplicateRows: number;
+  error?: string;
 };
 
 type SupabaseErrorLike = {
@@ -215,6 +233,10 @@ function normalizeExactValue(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+export function normalizeCurriculumSubjectNameForComparison(value: string) {
+  return normalizeExactValue(value).toLowerCase();
+}
+
 function exactDuplicateKey(input: { subjectName: string; learningModule: string; unitName: string; achievementStandard: string }) {
   return [
     normalizeExactValue(input.subjectName),
@@ -269,18 +291,21 @@ function isSimilarAchievementText(a: string, b: string) {
 export function buildCurriculumUploadSummary(rows: CurriculumUploadPreviewRow[]): CurriculumUploadSummary {
   return {
     totalRows: rows.length,
-    newRows: rows.filter((row) => row.status === "valid").length,
+    newRows: rows.filter((row) => row.status === "valid" || row.status === "existing_subject" || row.status === "new_subject").length,
+    existingSubjectRows: rows.filter((row) => row.status === "existing_subject").length,
+    newSubjectRows: rows.filter((row) => row.status === "new_subject").length,
     exactDuplicateRows: rows.filter((row) => row.status === "exact_duplicate").length,
     similarDuplicateRows: rows.filter((row) => row.status === "similar_duplicate").length,
-    errorRows: rows.filter((row) => row.status === "error").length,
-    missingSubjectRows: rows.filter((row) => row.status === "missing_subject").length
+    subjectTypeConflictRows: rows.filter((row) => row.status === "subject_type_conflict").length,
+    errorRows: rows.filter((row) => row.status === "error").length
   };
 }
 
 export function buildCurriculumStandardInputs(rows: CurriculumUploadPreviewRow[], option: CurriculumUploadSaveOption): CreateCurriculumStandardInput[] {
   return rows.flatMap((row) => {
-    if (row.status !== "valid" && !(option === "include_similar" && row.status === "similar_duplicate")) return [];
-    if (!row.subjectId || !row.subjectType) return [];
+    const isSaveableStatus = row.status === "valid" || row.status === "existing_subject" || row.status === "new_subject";
+    if (!isSaveableStatus && !(option === "include_similar" && row.status === "similar_duplicate")) return [];
+    if (!row.subjectType) return [];
 
     return [
       {
@@ -299,11 +324,37 @@ export function buildCurriculumStandardInputs(rows: CurriculumUploadPreviewRow[]
 }
 
 export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[], subjects: CurriculumSubject[], standards: CurriculumStandard[]) {
-  const subjectByName = new Map(subjects.map((subject) => [normalizeCurriculumHeader(subject.subjectName), subject]));
+  const subjectByName = new Map<string, CurriculumSubject>();
+  subjects.forEach((subject) => {
+    const subjectKey = normalizeCurriculumSubjectNameForComparison(subject.subjectName);
+    if (subjectKey && !subjectByName.has(subjectKey)) subjectByName.set(subjectKey, subject);
+  });
+
+  const uploadedSubjectTypeByKey = new Map<string, Set<CurriculumSubjectType>>();
+  const uploadedSubjectDisplayByKey = new Map<string, string>();
+  inputRows.forEach((rawRow) => {
+    const subjectName = normalizeExactValue(rawRow.subjectName);
+    const subjectKey = normalizeCurriculumSubjectNameForComparison(subjectName);
+    const subjectType = normalizeCurriculumSubjectType(rawRow.subjectTypeLabel);
+    if (!subjectKey) return;
+    if (!uploadedSubjectDisplayByKey.has(subjectKey)) uploadedSubjectDisplayByKey.set(subjectKey, subjectName);
+    if (!subjectType) return;
+
+    const subjectTypes = uploadedSubjectTypeByKey.get(subjectKey) || new Set<CurriculumSubjectType>();
+    subjectTypes.add(subjectType);
+    uploadedSubjectTypeByKey.set(subjectKey, subjectTypes);
+  });
+
+  const subjectTypeConflictKeys = new Set(
+    Array.from(uploadedSubjectTypeByKey.entries())
+      .filter(([, subjectTypes]) => subjectTypes.size > 1)
+      .map(([subjectKey]) => subjectKey)
+  );
+
   const existingExactKeys = new Set(standards.map(exactDuplicateKey));
   const seenExactKeys = new Set<string>();
   const comparableRows = standards.map((standard) => ({
-    subjectNameKey: normalizeCurriculumHeader(standard.subjectName),
+    subjectNameKey: normalizeCurriculumSubjectNameForComparison(standard.subjectName),
     learningModuleKey: normalizeCurriculumHeader(standard.learningModule),
     unitNameKey: unitKey(standard.unitName),
     normalizedAchievement: normalizeAchievementText(standard.achievementStandard),
@@ -314,21 +365,23 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
 
   inputRows.forEach((rawRow, index) => {
     const subjectName = normalizeExactValue(rawRow.subjectName);
+    const subjectNameKey = normalizeCurriculumSubjectNameForComparison(subjectName);
     const learningModule = normalizeExactValue(rawRow.learningModule);
     const unitName = normalizeExactValue(rawRow.unitName);
     const achievementStandard = normalizeExactValue(rawRow.achievementStandard);
     const keywords = normalizeExactValue(rawRow.keywords);
     const messages: string[] = [];
     const subjectType = normalizeCurriculumSubjectType(rawRow.subjectTypeLabel);
-    const subject = subjectByName.get(normalizeCurriculumHeader(subjectName));
-    const canonicalSubjectName = subject?.subjectName || subjectName;
+    const subject = subjectByName.get(subjectNameKey);
+    const duplicateSubjectName = subject?.subjectName || uploadedSubjectDisplayByKey.get(subjectNameKey) || subjectName;
     const baseRow = {
       ...rawRow,
-      subjectName: canonicalSubjectName,
+      subjectName,
       learningModule,
       unitName,
       achievementStandard,
       keywords,
+      normalizedSubjectName: subjectNameKey,
       subjectType: subjectType ?? undefined,
       subjectId: subject?.id,
       messages,
@@ -348,30 +401,30 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
       return;
     }
 
-    if (!subject) {
+    if (subjectTypeConflictKeys.has(subjectNameKey)) {
       previewRows.push({
         ...baseRow,
-        status: "missing_subject",
-        messages: ["curriculum_subjects에 등록되지 않은 과목입니다."]
+        status: "subject_type_conflict",
+        messages: ["엑셀 안에서 같은 과목명에 서로 다른 교과유형이 섞여 있습니다."]
       });
       return;
     }
 
-    if (subject.subjectType !== subjectType) {
+    if (subject && subject.subjectType !== subjectType) {
       previewRows.push({
         ...baseRow,
-        status: "error",
+        status: "subject_type_conflict",
         messages: [`등록된 교과유형은 ${curriculumSubjectTypeLabels[subject.subjectType]}입니다.`]
       });
       return;
     }
 
-    if (subject.subjectType === "ncs" && !learningModule) {
+    if (subjectType === "ncs" && !learningModule) {
       messages.push("NCS교과는 학습모듈명 입력을 권장합니다.");
     }
 
     const exactKey = exactDuplicateKey({
-      subjectName: canonicalSubjectName,
+      subjectName: duplicateSubjectName,
       learningModule,
       unitName,
       achievementStandard
@@ -387,7 +440,7 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
       return;
     }
 
-    const currentSubjectNameKey = normalizeCurriculumHeader(canonicalSubjectName);
+    const currentSubjectNameKey = normalizeCurriculumSubjectNameForComparison(duplicateSubjectName);
     const currentLearningModuleKey = normalizeCurriculumHeader(learningModule);
     const currentUnitNameKey = unitKey(unitName);
     const normalizedAchievement = normalizeAchievementText(achievementStandard);
@@ -408,7 +461,7 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
       learningModuleKey: currentLearningModuleKey,
       unitNameKey: currentUnitNameKey,
       normalizedAchievement,
-      label: [canonicalSubjectName, learningModule, unitName, achievementStandard].filter(Boolean).join(" / ")
+      label: [duplicateSubjectName, learningModule, unitName, achievementStandard].filter(Boolean).join(" / ")
     });
 
     if (similarMatches.length > 0) {
@@ -421,7 +474,14 @@ export function previewCurriculumUploadRows(inputRows: CurriculumUploadRawRow[],
       return;
     }
 
-    previewRows.push({ ...baseRow, status: "valid" });
+    previewRows.push({
+      ...baseRow,
+      status: subject ? "existing_subject" : "new_subject",
+      messages: [
+        ...messages,
+        subject ? "등록된 과목을 사용합니다." : "저장 시 curriculum_subjects에 과목을 자동 등록합니다."
+      ]
+    });
   });
 
   return {
@@ -592,6 +652,53 @@ export async function createCurriculumStandards(inputs: CreateCurriculumStandard
   if (error) return { standards: [], error: formatCurriculumError("성취기준 저장", error) };
 
   return { standards: ((data || []) as CurriculumStandardRow[]).map(normalizeStandard) };
+}
+
+export async function saveCurriculumUpload(inputs: CreateCurriculumStandardInput[]): Promise<SaveCurriculumUploadResult> {
+  if (inputs.length === 0) {
+    return {
+      savedRows: 0,
+      createdSubjectCount: 0,
+      reusedSubjectCount: 0,
+      skippedDuplicateRows: 0,
+      error: "저장할 신규 성취기준이 없습니다."
+    };
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+
+  const supabase = createSupabaseBrowserClient();
+  if (supabase) {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch("/api/curriculum/upload", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ rows: inputs })
+  });
+  const result = (await response.json().catch(() => null)) as Partial<SaveCurriculumUploadResult> | null;
+
+  if (!response.ok) {
+    return {
+      savedRows: 0,
+      createdSubjectCount: 0,
+      reusedSubjectCount: 0,
+      skippedDuplicateRows: 0,
+      error: result?.error || "성취기준 업로드 저장에 실패했습니다."
+    };
+  }
+
+  return {
+    savedRows: result?.savedRows ?? 0,
+    createdSubjectCount: result?.createdSubjectCount ?? 0,
+    reusedSubjectCount: result?.reusedSubjectCount ?? 0,
+    skippedDuplicateRows: result?.skippedDuplicateRows ?? 0
+  };
 }
 
 export async function getCurriculumStandardsBySubject(subjectName: string) {
