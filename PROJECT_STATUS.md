@@ -136,10 +136,15 @@
   - `ai_content`, `edited_content`, `final_content` 필드 적용
   - `status`, `edited_at`, `finalized_at`, `edited_by` 적용
   - `ai_generated`, `editing`, `saved`, `finalized` 상태 관리
+  - `is_current`, `version_no`, `academic_year`, `semester`, `subject_name`, `parent_draft_id` 기반 현재본 구조 추가
+  - 현재본 판단 기준을 `user_id + school_id + student_id + mode + subject_name + academic_year + semester`로 정리
+  - 같은 기준의 현재본이 있으면 새 AI 생성 시 insert 대신 현재 row update 적용
+  - 최종 확정 현재본은 새 AI 생성으로 자동 덮어쓰지 않고 최종 해제 또는 새 결과 사용 흐름으로만 변경
 
 - 자동 저장
   - 교사 수정본 3초 자동 저장 구현
   - 단일 생성과 일괄 생성 결과 편집에 적용
+  - `draft_id`가 있으면 해당 row를 직접 update하고, 없을 때만 현재본 기준 fallback 적용
 
 - 최종본
   - 최종 확정 구현
@@ -149,7 +154,9 @@
 
 - Student Record Center
   - `/student-records` 화면 구현
-  - 현재 로그인한 교사의 학생별 과세특/행특 최신본 조회
+  - 현재 로그인한 교사의 학생별 과세특/행특 현재본 조회
+  - 기본 조회를 `is_current = true` 현재본으로 제한
+  - 과세특은 과목별 현재본 여러 개, 행특은 학생별 현재본 1개 구조로 표시
   - 학생 목록 필터의 학년, 학과, 반 options와 선택 value를 분리해 관리
   - AI 원본/수정본/최종본 탭
   - 생성 이력 timeline
@@ -171,6 +178,7 @@
   - 과세특 일괄 생성 결과 다운로드 구현
   - 행특 일괄 생성 결과 다운로드 구현
   - 최종본 선택 규칙 반영
+  - 현재본 update 결과를 기준으로 복사와 다운로드 내용 결정
   - 실패 결과 상태 표시
 
 - UI/UX 개선
@@ -315,3 +323,14 @@
   - 교사별 학생부 draft 분리 완료 상태 문서화
   - NCS 학습모듈 선택 기능 완료 상태 문서화
   - 과목 선택 `datalist` 버그 수정 완료 상태 문서화
+
+- 2026-07-06
+  - `20260706_record_drafts_current_versions.sql` migration 추가
+  - `record_drafts`에 현재본 컬럼 `is_current`, `version_no`, `academic_year`, `semester`, `subject_name`, `parent_draft_id` 추가
+  - 기존 데이터는 기준별 최신 row만 `is_current = true`, 나머지는 `is_current = false`로 backfill하도록 정리
+  - 현재본 기준 unique index와 조회 index 추가
+  - `saveRecordDraft`를 같은 현재본 기준 update 우선 구조로 변경
+  - 자동저장, 수동저장, 최종확정, 최종해제를 `draft_id` 우선 update로 변경
+  - Student Record Center 기본 조회를 `is_current = true`로 제한하고 과세특 과목별 현재본 표시 적용
+  - 일괄 과세특/행특 생성 결과가 학생별 현재본을 insert 대신 update하도록 저장 흐름 변경
+  - README.md와 PROJECT_STATUS.md에 record_drafts 장기 운영 안정화 내용 반영

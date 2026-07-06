@@ -138,11 +138,14 @@
 
 ### 학생부 관리
 
-- `/student-records`에서 학생별 과세특/행특 최신본과 생성 이력 확인
+- `/student-records`에서 학생별 과세특/행특 현재본 확인
 - 현재 로그인한 교사의 `record_drafts.user_id`에 해당하는 학생부만 조회
+- 기본 조회는 `is_current = true`인 현재본만 대상으로 하며, 전체 이력 보기는 이후 확장할 수 있도록 구조를 유지
 - 좌측 학생 목록 검색과 필터
 - 학생 목록 필터의 학년, 학과, 반 options는 전체 후보 목록을 유지
 - 우측 학생별 카드형 상세
+- 과세특은 과목별 현재본을 별도 카드로 표시
+- 행특은 학생별 `mode = behavior` 현재본 1개를 표시
 - 과세특/행특 각각 AI 원본, 수정본, 최종본 탭 제공
 - 생성, 수정 저장, 최종 확정 이력을 timeline으로 표시
 - 학생부 카드에서 복사, AI 다시 생성, 최종 확정, 최종 해제 가능
@@ -151,6 +154,11 @@
 
 - `record_drafts` 중심 lifecycle 적용
 - `record_drafts.user_id`를 교사 소유자 기준으로 사용하며 조회, 수정, 최종 확정은 항상 현재 로그인 사용자로 제한
+- 현재본 기준 컬럼: `is_current`, `version_no`, `academic_year`, `semester`, `subject_name`, `parent_draft_id`
+- 현재본 판단 기준: `user_id + school_id + student_id + mode + subject_name + academic_year + semester`
+- 같은 기준의 현재본이 있으면 새 AI 생성 결과는 새 row를 만들지 않고 현재 row를 갱신
+- 현재본이 `finalized` 상태이면 새 AI 생성 결과로 자동 덮어쓰지 않고, 최종 확정 해제 또는 새 AI 결과 사용 같은 명시적 사용자 흐름을 요구
+- 자동 저장, 수동 저장, 최종 확정, 최종 해제는 `draft_id`가 있으면 해당 row를 먼저 update하고, `draft_id`가 없을 때만 현재본 기준으로 fallback
 - `ai_content`: AI 원본
 - `edited_content`: 교사 수정본
 - `final_content`: 최종본
@@ -173,6 +181,7 @@
 - 과세특 일괄 생성 결과 엑셀 다운로드
 - 행동특성 일괄 생성 결과 엑셀 다운로드
 - 최종본 선택 규칙을 적용해 다운로드 내용 결정
+- 생성 결과가 기존 현재본을 갱신한 경우에도 화면의 현재본 상태를 기준으로 다운로드와 복사를 수행
 - 실패 항목은 생성 상태를 실패로 표시하고 결과 칸은 비움
 
 ### 관리자 기능
@@ -261,6 +270,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `migrations/20260702_curriculum_learning_module.sql`: 성취기준 학습모듈 컬럼과 중복 기준 확장
 - `migrations/20260702_secure_record_drafts_rls.sql`: 학생부 개인 소유 RLS, 사용자 관리 RLS, 생성 API 우회 방지 보강
 - `migrations/20260703_curriculum_upload_auto_subjects.sql`: 성취기준 업로드 upsert용 중복 방지 인덱스와 과목명 정규화 조회 인덱스
+- `migrations/20260706_record_drafts_current_versions.sql`: `record_drafts` 현재본 컬럼, 기준별 current unique index, 기존 데이터 current backfill
 
 ## 4. 주요 화면
 
@@ -305,7 +315,8 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 ### 학생부 관리
 
 - 경로: `/student-records`
-- 학생별 과세특/행특 최신본 조회
+- 학생별 과세특/행특 현재본 조회
+- 과세특은 과목별 현재본, 행특은 학생별 현재본 1개 기준으로 표시
 - 학생 목록 필터는 현재 학년/학과/반 선택값과 후보 목록을 분리해 관리
 - AI 원본, 수정본, 최종본 비교
 - 생성 이력 timeline 확인
@@ -378,6 +389,8 @@ AI 원본
 - 생성 API가 반환한 최초 결과입니다.
 - `record_drafts.ai_content`에 저장합니다.
 - 비교 기준으로 보존합니다.
+- 같은 현재본 기준의 row가 이미 있으면 `record_drafts`를 새로 insert하지 않고 해당 row의 AI 원본과 lifecycle 값을 갱신합니다.
+- 기존 현재본이 최종 확정 상태이면 자동 갱신하지 않습니다.
 
 ### 수정본
 
@@ -392,6 +405,13 @@ AI 원본
 - 복사와 엑셀 다운로드에서 가장 우선 사용합니다.
 - 필요하면 최종 해제로 다시 수정 상태로 돌릴 수 있습니다.
 
+### 현재본과 이력
+
+- 과세특 현재본은 교사, 학교, 학생, `mode = subject`, 과목명, 학년도, 학기 조합으로 1개만 유지합니다.
+- 행특 현재본은 교사, 학교, 학생, `mode = behavior`, 학년도, 학기 조합으로 1개만 유지하며 `subject_name`은 null로 둡니다.
+- 기존 `record_drafts` 데이터는 삭제하지 않고 migration에서 기준별 최신 row만 `is_current = true`, 나머지는 `is_current = false`로 표시합니다.
+- `version_no`는 기존 row를 기준별 생성 순서대로 backfill하며, 현재본 AI 재생성 갱신 시 증가합니다.
+
 ## 7. 보안 및 RLS 권한 구조
 
 ### 학교 공유 데이터
@@ -405,6 +425,7 @@ AI 원본
 - `record_drafts`의 AI 원본, 수정본, 최종본, 생성 이력은 `user_id = auth.uid()` 기준으로만 조회/수정합니다.
 - 같은 학교 관리자라도 기본 RLS 정책으로 다른 교사의 `record_drafts`를 조회하지 않습니다.
 - Bulk 생성과 Student Record Center도 `school_id + user_id` 필터로 현재 로그인 교사의 draft만 저장, 수정, 조회합니다.
+- 현재본 unique index와 조회 조건은 RLS를 변경하지 않으며, 기존 `user_id = auth.uid()` 소유자 정책을 유지합니다.
 
 ### 관리자 권한
 
