@@ -18,6 +18,12 @@ type RecordDraftRow = {
   edited_at: string | null;
   finalized_at: string | null;
   edited_by: string | null;
+  is_current: boolean | null;
+  version_no: number | null;
+  academic_year: string | null;
+  semester: string | null;
+  subject_name: string | null;
+  parent_draft_id: string | null;
 };
 
 export type StudentRecordDraft = {
@@ -36,6 +42,12 @@ export type StudentRecordDraft = {
   editedAt: string;
   finalizedAt: string;
   editedBy: string;
+  isCurrent: boolean;
+  versionNo: number;
+  academicYear: string;
+  semester: string;
+  subjectName: string;
+  parentDraftId: string;
 };
 
 export type StudentRecordDraftsResult = {
@@ -44,7 +56,7 @@ export type StudentRecordDraftsResult = {
 };
 
 const recordDraftColumns =
-  "id, student_id, mode, input_payload, result_payload, draft_text, ai_content, edited_content, final_content, status, created_at, updated_at, edited_at, finalized_at, edited_by";
+  "id, student_id, mode, input_payload, result_payload, draft_text, ai_content, edited_content, final_content, status, created_at, updated_at, edited_at, finalized_at, edited_by, is_current, version_no, academic_year, semester, subject_name, parent_draft_id";
 
 function normalizeStatus(status: string | null): RecordDraftLifecycleStatus {
   if (status === "editing" || status === "saved" || status === "finalized") return status;
@@ -73,7 +85,13 @@ function normalizeDraft(row: RecordDraftRow): StudentRecordDraft | null {
     updatedAt: row.updated_at || "",
     editedAt: row.edited_at || "",
     finalizedAt: row.finalized_at || "",
-    editedBy: row.edited_by || ""
+    editedBy: row.edited_by || "",
+    isCurrent: row.is_current !== false,
+    versionNo: row.version_no || 1,
+    academicYear: row.academic_year || "",
+    semester: row.semester || "",
+    subjectName: row.subject_name || "",
+    parentDraftId: row.parent_draft_id || ""
   };
 }
 
@@ -99,9 +117,12 @@ export async function listStudentRecordDrafts(): Promise<StudentRecordDraftsResu
     .select(recordDraftColumns)
     .eq("school_id", profileResult.profile.school_id)
     .eq("user_id", profileResult.profile.id)
+    .eq("is_current", true)
     .in("mode", ["subject", "behavior"])
     .not("student_id", "is", null)
-    .order("created_at", { ascending: false });
+    .order("mode", { ascending: true })
+    .order("subject_name", { ascending: true })
+    .order("updated_at", { ascending: false });
 
   if (error) {
     return {

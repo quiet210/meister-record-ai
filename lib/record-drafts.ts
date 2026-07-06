@@ -5,24 +5,27 @@ import type { CommentMode, GenerateResponse, RecordDraftLifecycleStatus, RecordF
 type SaveRecordDraftInput = {
   mode: CommentMode;
   studentId?: string;
+  draftId?: string;
   payload: RecordFormPayload;
   result: GenerateResponse;
-  saveMode?: "insert" | "replace-latest";
 };
 
 type SaveEditedRecordDraftInput = {
   mode: CommentMode;
   studentId?: string;
+  draftId?: string;
   payload: RecordFormPayload;
   result?: GenerateResponse | null;
   aiContent: string;
   editedContent: string;
   status?: Extract<RecordDraftLifecycleStatus, "editing" | "saved">;
+  allowFinalizedUpdate?: boolean;
 };
 
 type FinalizeRecordDraftInput = {
   mode: CommentMode;
   studentId?: string;
+  draftId?: string;
   payload: RecordFormPayload;
   result?: GenerateResponse | null;
   aiContent: string;
@@ -32,15 +35,31 @@ type FinalizeRecordDraftInput = {
 
 type UnfinalizeRecordDraftInput = Omit<FinalizeRecordDraftInput, "finalContent">;
 
-type LatestDraftLookupInput = {
+type DraftScope = {
+  subjectName: string | null;
+  academicYear: string | null;
+  semester: string | null;
+};
+
+type DraftLookupInput = DraftScope & {
   mode: CommentMode;
   studentId?: string;
   schoolId: string;
   userId: string;
 };
 
+type ExistingDraft = {
+  id: string;
+  status: RecordDraftLifecycleStatus;
+  versionNo: number;
+};
+
+type DraftMutationAction = "inserted" | "updated";
+
 export type RecordDraftMutationResult = {
   id?: string;
+  action?: DraftMutationAction;
+  blockedByFinalized?: boolean;
   error?: string;
 };
 
@@ -50,6 +69,8 @@ type RecordDraftContent = {
   aiContent?: string | null;
   draftText?: string | null;
 };
+
+type SupabaseBrowserClient = NonNullable<ReturnType<typeof createSupabaseBrowserClient>>;
 
 export const recordDraftLifecycleLabels: Record<RecordDraftLifecycleStatus, string> = {
   ai_generated: "AI 생성됨",
@@ -102,50 +123,182 @@ function getClientAndProfileError(supabase: ReturnType<typeof createSupabaseBrow
   return profileError || "사용자 프로필을 찾지 못했습니다.";
 }
 
-async function findLatestDraftId(supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>, input: LatestDraftLookupInput) {
-  let latestDraftQuery = supabase
-    .from("record_drafts")
-    .select("id")
-    .eq("school_id", input.schoolId)
-    .eq("user_id", input.userId)
-    .eq("mode", input.mode)
-    .order("created_at", { ascending: false })
-    .limit(1);
+function normalizeLifecycleStatus(status: string | null | undefined): RecordDraftLifecycleStatus {
+  if (status === "editing" || status === "saved" || status === "finalized") return status;
+  return "ai_generated";
+}
 
-  latestDraftQuery = input.studentId ? latestDraftQuery.eq("student_id", input.studentId) : latestDraftQuery.is("student_id", null);
+function normalizeOptionalText(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
-  const { data, error } = await latestDraftQuery;
+function getPayloadText(payload: RecordFormPayload, keys: string[]) {
+  const payloadRecord = payload as Record<string, unknown>;
+
+  for (const key of keys) {
+    const value = normalizeOptionalText(payloadRecord[key]);
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function getDraftScope(mode: CommentMode, payload: RecordFormPayload): DraftScope {
   return {
-    id: data?.[0]?.id as string | undefined,
+    subjectName: mode === "subject" ? getPayloadText(payload, ["subjectName", "subject_name"]) : null,
+    academicYear: getPayloadText(payload, ["academicYear", "academic_year"]),
+    semester: getPayloadText(payload, ["semester"])
+  };
+}
+
+function withDraftScope(row: Record<string, unknown>, scope: DraftScope) {
+  return {
+    ...row,
+    subject_name: scope.subjectName,
+    academic_year: scope.academicYear,
+    semester: scope.semester
+  };
+}
+
+function applyNullableFilter<TQuery extends { eq: (column: string, value: string) => TQuery; is: (column: string, value: null) => TQuery }>(
+  query: TQuery,
+  column: string,
+  value?: string | null
+) {
+  return value ? query.eq(column, value) : query.is(column, null);
+}
+
+function parseExistingDraft(data: unknown): ExistingDraft | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const row = data as { id?: unknown; status?: unknown; version_no?: unknown };
+  if (typeof row.id !== "string") return undefined;
+
+  return {
+    id: row.id,
+    status: normalizeLifecycleStatus(typeof row.status === "string" ? row.status : null),
+    versionNo: typeof row.version_no === "number" && Number.isFinite(row.version_no) ? row.version_no : 1
+  };
+}
+
+async function findDraftById(supabase: SupabaseBrowserClient, draftId: string, schoolId: string, userId: string) {
+  const { data, error } = await supabase
+    .from("record_drafts")
+    .select("id, status, version_no")
+    .eq("id", draftId)
+    .eq("school_id", schoolId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return {
+    draft: parseExistingDraft(data),
     error
   };
 }
 
+async function findCurrentDraft(supabase: SupabaseBrowserClient, input: DraftLookupInput) {
+  let currentDraftQuery = supabase
+    .from("record_drafts")
+    .select("id, status, version_no")
+    .eq("school_id", input.schoolId)
+    .eq("user_id", input.userId)
+    .eq("mode", input.mode)
+    .eq("is_current", true)
+    .limit(1);
+
+  currentDraftQuery = input.studentId ? currentDraftQuery.eq("student_id", input.studentId) : currentDraftQuery.is("student_id", null);
+  currentDraftQuery = applyNullableFilter(currentDraftQuery, "subject_name", input.subjectName);
+  currentDraftQuery = applyNullableFilter(currentDraftQuery, "academic_year", input.academicYear);
+  currentDraftQuery = applyNullableFilter(currentDraftQuery, "semester", input.semester);
+
+  const { data, error } = await currentDraftQuery.maybeSingle();
+  return {
+    draft: parseExistingDraft(data),
+    error
+  };
+}
+
+function finalizedBlockResult(): RecordDraftMutationResult {
+  return {
+    blockedByFinalized: true,
+    error: "이미 최종 확정된 현재본입니다. 최종 확정을 해제하거나 새 AI 결과 사용을 명시적으로 선택한 뒤 저장하세요."
+  };
+}
+
 async function insertDraft(
-  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>,
+  supabase: SupabaseBrowserClient,
   row: Record<string, unknown>
 ): Promise<RecordDraftMutationResult> {
   const { data, error } = await supabase.from("record_drafts").insert(row).select("id").single();
   if (error) return { error: error.message };
-  return { id: data?.id as string | undefined };
+  return { id: data?.id as string | undefined, action: "inserted" };
 }
 
-async function updateLatestDraft(
-  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>,
-  lookup: LatestDraftLookupInput,
+async function updateDraftById(
+  supabase: SupabaseBrowserClient,
+  draftId: string,
+  ownership: { schoolId: string; userId: string },
   row: Record<string, unknown>,
-  fallbackRow: Record<string, unknown>
+  options: { allowFinalizedUpdate?: boolean } = {}
 ): Promise<RecordDraftMutationResult> {
-  const latestDraft = await findLatestDraftId(supabase, lookup);
-  if (latestDraft.error) return { error: latestDraft.error.message };
+  const existingDraft = await findDraftById(supabase, draftId, ownership.schoolId, ownership.userId);
+  if (existingDraft.error) return { error: existingDraft.error.message };
+  if (!existingDraft.draft) return { error: "수정할 학생부 현재본을 찾지 못했습니다." };
+  if (existingDraft.draft.status === "finalized" && !options.allowFinalizedUpdate) return finalizedBlockResult();
 
-  if (!latestDraft.id) {
-    return insertDraft(supabase, fallbackRow);
+  const { data, error } = await supabase
+    .from("record_drafts")
+    .update(row)
+    .eq("id", draftId)
+    .eq("school_id", ownership.schoolId)
+    .eq("user_id", ownership.userId)
+    .select("id")
+    .single();
+
+  if (error) return { error: error.message };
+  return { id: data?.id as string | undefined, action: "updated" };
+}
+
+async function updateCurrentDraftOrInsert(
+  supabase: SupabaseBrowserClient,
+  lookup: DraftLookupInput,
+  updateRow: Record<string, unknown>,
+  insertRow: Record<string, unknown>,
+  options: { draftId?: string; allowFinalizedUpdate?: boolean; bumpVersion?: boolean } = {}
+): Promise<RecordDraftMutationResult> {
+  if (options.draftId) {
+    return updateDraftById(
+      supabase,
+      options.draftId,
+      {
+        schoolId: lookup.schoolId,
+        userId: lookup.userId
+      },
+      updateRow,
+      { allowFinalizedUpdate: options.allowFinalizedUpdate }
+    );
   }
 
-  const { data, error } = await supabase.from("record_drafts").update(row).eq("id", latestDraft.id).select("id").single();
-  if (error) return { error: error.message };
-  return { id: data?.id as string | undefined };
+  const currentDraft = await findCurrentDraft(supabase, lookup);
+  if (currentDraft.error) return { error: currentDraft.error.message };
+
+  if (!currentDraft.draft) {
+    return insertDraft(supabase, insertRow);
+  }
+
+  if (currentDraft.draft.status === "finalized" && !options.allowFinalizedUpdate) return finalizedBlockResult();
+
+  return updateDraftById(
+    supabase,
+    currentDraft.draft.id,
+    {
+      schoolId: lookup.schoolId,
+      userId: lookup.userId
+    },
+    options.bumpVersion ? { ...updateRow, version_no: currentDraft.draft.versionNo + 1 } : updateRow,
+    { allowFinalizedUpdate: options.allowFinalizedUpdate }
+  );
 }
 
 export async function saveRecordDraft(input: SaveRecordDraftInput): Promise<RecordDraftMutationResult> {
@@ -159,38 +312,36 @@ export async function saveRecordDraft(input: SaveRecordDraftInput): Promise<Reco
     return { error: profileResult.error || "사용자 프로필을 찾지 못했습니다." };
   }
 
-  const draftRow = {
-    school_id: profileResult.profile.school_id,
-    user_id: profileResult.profile.id,
-    student_id: input.studentId || null,
+  const scope = getDraftScope(input.mode, input.payload);
+  const lookup = {
     mode: input.mode,
-    input_payload: input.payload,
-    result_payload: input.result,
-    draft_text: input.result.draft || null,
-    ai_content: input.result.draft || null,
-    edited_content: input.result.draft || null,
-    final_content: null,
-    status: "ai_generated" satisfies RecordDraftLifecycleStatus,
-    edited_at: null,
-    finalized_at: null,
-    edited_by: null
+    studentId: input.studentId,
+    schoolId: profileResult.profile.school_id,
+    userId: profileResult.profile.id,
+    ...scope
   };
+  const draftRow = withDraftScope(
+    {
+      school_id: profileResult.profile.school_id,
+      user_id: profileResult.profile.id,
+      student_id: input.studentId || null,
+      mode: input.mode,
+      input_payload: input.payload,
+      result_payload: input.result,
+      draft_text: input.result.draft || null,
+      ai_content: input.result.draft || null,
+      edited_content: input.result.draft || null,
+      final_content: null,
+      status: "ai_generated" satisfies RecordDraftLifecycleStatus,
+      edited_at: null,
+      finalized_at: null,
+      edited_by: null,
+      is_current: true
+    },
+    scope
+  );
 
-  if (input.saveMode === "replace-latest") {
-    return updateLatestDraft(
-      supabase,
-      {
-        mode: input.mode,
-        studentId: input.studentId,
-        schoolId: profileResult.profile.school_id,
-        userId: profileResult.profile.id
-      },
-      draftRow,
-      draftRow
-    );
-  }
-
-  return insertDraft(supabase, draftRow);
+  return updateCurrentDraftOrInsert(supabase, lookup, draftRow, { ...draftRow, version_no: 1 }, { draftId: input.draftId, bumpVersion: true });
 }
 
 export async function saveEditedRecordDraft(input: SaveEditedRecordDraftInput): Promise<RecordDraftMutationResult> {
@@ -201,52 +352,68 @@ export async function saveEditedRecordDraft(input: SaveEditedRecordDraftInput): 
     return { error: getClientAndProfileError(supabase, profileResult.error) };
   }
 
+  const scope = getDraftScope(input.mode, input.payload);
   const normalizedAiContent = input.aiContent || input.result?.draft || input.editedContent;
   const normalizedEditedContent = input.editedContent || normalizedAiContent;
   const status = input.status || "saved";
+  const editedAt = new Date().toISOString();
 
-  const updateRow = {
-    input_payload: input.payload,
-    ...(input.result ? { result_payload: input.result } : {}),
-    draft_text: normalizedEditedContent || null,
-    ai_content: normalizedAiContent || null,
-    edited_content: normalizedEditedContent || null,
-    status,
-    edited_at: new Date().toISOString(),
-    edited_by: profileResult.profile.id
-  };
-
-  const insertRow = {
-    school_id: profileResult.profile.school_id,
-    user_id: profileResult.profile.id,
-    student_id: input.studentId || null,
-    mode: input.mode,
-    input_payload: input.payload,
-    result_payload: input.result || {
-      draft: normalizedAiContent,
-      evidence: [],
-      warnings: []
+  const updateRow = withDraftScope(
+    {
+      input_payload: input.payload,
+      ...(input.result ? { result_payload: input.result } : {}),
+      draft_text: normalizedEditedContent || null,
+      ai_content: normalizedAiContent || null,
+      edited_content: normalizedEditedContent || null,
+      ...(input.allowFinalizedUpdate ? { final_content: null, finalized_at: null } : {}),
+      status,
+      edited_at: editedAt,
+      edited_by: profileResult.profile.id
     },
-    draft_text: normalizedEditedContent || null,
-    ai_content: normalizedAiContent || null,
-    edited_content: normalizedEditedContent || null,
-    final_content: null,
-    status,
-    edited_at: new Date().toISOString(),
-    finalized_at: null,
-    edited_by: profileResult.profile.id
-  };
+    scope
+  );
 
-  return updateLatestDraft(
+  const insertRow = withDraftScope(
+    {
+      school_id: profileResult.profile.school_id,
+      user_id: profileResult.profile.id,
+      student_id: input.studentId || null,
+      mode: input.mode,
+      input_payload: input.payload,
+      result_payload: input.result || {
+        draft: normalizedAiContent,
+        evidence: [],
+        warnings: []
+      },
+      draft_text: normalizedEditedContent || null,
+      ai_content: normalizedAiContent || null,
+      edited_content: normalizedEditedContent || null,
+      final_content: null,
+      status,
+      edited_at: editedAt,
+      finalized_at: null,
+      edited_by: profileResult.profile.id,
+      is_current: true,
+      version_no: 1
+    },
+    scope
+  );
+
+  return updateCurrentDraftOrInsert(
     supabase,
     {
       mode: input.mode,
       studentId: input.studentId,
       schoolId: profileResult.profile.school_id,
-      userId: profileResult.profile.id
+      userId: profileResult.profile.id,
+      ...scope
     },
     updateRow,
-    insertRow
+    insertRow,
+    {
+      draftId: input.draftId,
+      allowFinalizedUpdate: input.allowFinalizedUpdate
+    }
   );
 }
 
@@ -258,47 +425,61 @@ export async function finalizeRecordDraft(input: FinalizeRecordDraftInput): Prom
     return { error: getClientAndProfileError(supabase, profileResult.error) };
   }
 
+  const scope = getDraftScope(input.mode, input.payload);
   const finalizedAt = new Date().toISOString();
   const normalizedAiContent = input.aiContent || input.result?.draft || input.editedContent || input.finalContent;
   const normalizedEditedContent = input.editedContent || normalizedAiContent;
   const normalizedFinalContent = input.finalContent || normalizedEditedContent;
 
-  const updateRow = {
-    input_payload: input.payload,
-    ...(input.result ? { result_payload: input.result } : {}),
-    draft_text: normalizedFinalContent || null,
-    ai_content: normalizedAiContent || null,
-    edited_content: normalizedEditedContent || null,
-    final_content: normalizedFinalContent || null,
-    status: "finalized" satisfies RecordDraftLifecycleStatus,
-    edited_at: finalizedAt,
-    finalized_at: finalizedAt,
-    edited_by: profileResult.profile.id
-  };
-
-  const insertRow = {
-    school_id: profileResult.profile.school_id,
-    user_id: profileResult.profile.id,
-    student_id: input.studentId || null,
-    mode: input.mode,
-    result_payload: input.result || {
-      draft: normalizedAiContent,
-      evidence: [],
-      warnings: []
+  const updateRow = withDraftScope(
+    {
+      input_payload: input.payload,
+      ...(input.result ? { result_payload: input.result } : {}),
+      draft_text: normalizedFinalContent || null,
+      ai_content: normalizedAiContent || null,
+      edited_content: normalizedEditedContent || null,
+      final_content: normalizedFinalContent || null,
+      status: "finalized" satisfies RecordDraftLifecycleStatus,
+      edited_at: finalizedAt,
+      finalized_at: finalizedAt,
+      edited_by: profileResult.profile.id
     },
-    ...updateRow
-  };
+    scope
+  );
 
-  return updateLatestDraft(
+  const insertRow = withDraftScope(
+    {
+      school_id: profileResult.profile.school_id,
+      user_id: profileResult.profile.id,
+      student_id: input.studentId || null,
+      mode: input.mode,
+      result_payload: input.result || {
+        draft: normalizedAiContent,
+        evidence: [],
+        warnings: []
+      },
+      is_current: true,
+      version_no: 1,
+      ...updateRow
+    },
+    scope
+  );
+
+  return updateCurrentDraftOrInsert(
     supabase,
     {
       mode: input.mode,
       studentId: input.studentId,
       schoolId: profileResult.profile.school_id,
-      userId: profileResult.profile.id
+      userId: profileResult.profile.id,
+      ...scope
     },
     updateRow,
-    insertRow
+    insertRow,
+    {
+      draftId: input.draftId,
+      allowFinalizedUpdate: true
+    }
   );
 }
 
@@ -310,45 +491,59 @@ export async function unfinalizeRecordDraft(input: UnfinalizeRecordDraftInput): 
     return { error: getClientAndProfileError(supabase, profileResult.error) };
   }
 
+  const scope = getDraftScope(input.mode, input.payload);
   const normalizedAiContent = input.aiContent || input.result?.draft || input.editedContent;
   const normalizedEditedContent = input.editedContent || normalizedAiContent;
   const updatedAt = new Date().toISOString();
 
-  const updateRow = {
-    input_payload: input.payload,
-    ...(input.result ? { result_payload: input.result } : {}),
-    draft_text: normalizedEditedContent || null,
-    ai_content: normalizedAiContent || null,
-    edited_content: normalizedEditedContent || null,
-    final_content: null,
-    status: "saved" satisfies RecordDraftLifecycleStatus,
-    edited_at: updatedAt,
-    finalized_at: null,
-    edited_by: profileResult.profile.id
-  };
-
-  const insertRow = {
-    school_id: profileResult.profile.school_id,
-    user_id: profileResult.profile.id,
-    student_id: input.studentId || null,
-    mode: input.mode,
-    result_payload: input.result || {
-      draft: normalizedAiContent,
-      evidence: [],
-      warnings: []
+  const updateRow = withDraftScope(
+    {
+      input_payload: input.payload,
+      ...(input.result ? { result_payload: input.result } : {}),
+      draft_text: normalizedEditedContent || null,
+      ai_content: normalizedAiContent || null,
+      edited_content: normalizedEditedContent || null,
+      final_content: null,
+      status: "saved" satisfies RecordDraftLifecycleStatus,
+      edited_at: updatedAt,
+      finalized_at: null,
+      edited_by: profileResult.profile.id
     },
-    ...updateRow
-  };
+    scope
+  );
 
-  return updateLatestDraft(
+  const insertRow = withDraftScope(
+    {
+      school_id: profileResult.profile.school_id,
+      user_id: profileResult.profile.id,
+      student_id: input.studentId || null,
+      mode: input.mode,
+      result_payload: input.result || {
+        draft: normalizedAiContent,
+        evidence: [],
+        warnings: []
+      },
+      is_current: true,
+      version_no: 1,
+      ...updateRow
+    },
+    scope
+  );
+
+  return updateCurrentDraftOrInsert(
     supabase,
     {
       mode: input.mode,
       studentId: input.studentId,
       schoolId: profileResult.profile.school_id,
-      userId: profileResult.profile.id
+      userId: profileResult.profile.id,
+      ...scope
     },
     updateRow,
-    insertRow
+    insertRow,
+    {
+      draftId: input.draftId,
+      allowFinalizedUpdate: true
+    }
   );
 }
