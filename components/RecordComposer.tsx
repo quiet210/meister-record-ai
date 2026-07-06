@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { gradeOptions } from "@/lib/options";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
+import { postGenerateApi } from "@/lib/generate-api-client";
 import { finalizeRecordDraft, getEffectiveRecordContent, saveEditedRecordDraft, saveRecordDraft, unfinalizeRecordDraft } from "@/lib/record-drafts";
 import { ensureUserProfile, listStudents } from "@/lib/students";
 import type { CurriculumStandard, CurriculumSubjectType } from "@/lib/curriculum";
@@ -138,6 +139,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
   const [homeroomMemo, setHomeroomMemo] = useState("");
   const [lengthOption, setLengthOption] = useState<CommentLength>("medium");
   const [result, setResult] = useState<GenerateResponse | null>(null);
+  const [draftId, setDraftId] = useState("");
   const [aiContent, setAiContent] = useState("");
   const [editedContent, setEditedContentState] = useState("");
   const [finalContent, setFinalContent] = useState("");
@@ -268,6 +270,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     }
 
     setResult(null);
+    setDraftId("");
     setAiContent("");
     setEditedContentState("");
     setFinalContent("");
@@ -289,6 +292,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     setIsLoading(true);
     setSavedMessage("");
     setResult(null);
+    setDraftId("");
     setAiContent("");
     setEditedContentState("");
     setFinalContent("");
@@ -298,13 +302,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     setLastSavedEditedContent("");
 
     try {
-      const response = await fetch(config.endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(buildPayload())
-      });
+      const response = await postGenerateApi(config.endpoint, buildPayload());
 
       const data = (await response.json()) as GenerateResponse;
       setResult(data);
@@ -324,6 +322,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
         if (saveResult.error) {
           setSavedMessage(`AI 원본 저장 실패: ${saveResult.error}`);
         } else {
+          setDraftId(saveResult.id || "");
           setLastSavedEditedContent(data.draft);
           setSavedMessage("AI 원본을 record_drafts에 저장했습니다.");
         }
@@ -345,13 +344,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     setSavedMessage("");
 
     try {
-      const response = await fetch(config.endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(buildPayload())
-      });
+      const response = await postGenerateApi(config.endpoint, buildPayload());
 
       const data = (await response.json()) as GenerateResponse;
       if (!data.draft) {
@@ -389,11 +382,13 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     const saveResult = await saveEditedRecordDraft({
       mode,
       studentId: selectedStudent?.id,
+      draftId,
       payload: buildPayload(),
       result: pendingRegeneration,
       aiContent: nextAiContent,
       editedContent: nextEditedContent,
-      status: "saved"
+      status: "saved",
+      allowFinalizedUpdate: true
     });
 
     setIsSavingDraft(false);
@@ -403,6 +398,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       return;
     }
 
+    setDraftId(saveResult.id || draftId);
     setLastSavedEditedContent(nextEditedContent);
     setSavedMessage("새 AI 결과를 교사 수정본으로 저장했습니다.");
   }
@@ -427,6 +423,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     const saveResult = await saveEditedRecordDraft({
       mode,
       studentId: selectedStudent?.id,
+      draftId,
       payload: buildPayload(),
       result,
       aiContent: aiContent || result?.draft || content,
@@ -440,6 +437,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       return;
     }
 
+    setDraftId(saveResult.id || draftId);
     setLifecycleStatus("saved");
     setLastSavedEditedContent(content);
     setSavedMessage(source === "auto" ? "3초 자동 저장 완료" : "교사 수정본을 저장했습니다.");
@@ -462,6 +460,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     const saveResult = await finalizeRecordDraft({
       mode,
       studentId: selectedStudent?.id,
+      draftId,
       payload: buildPayload(),
       result,
       aiContent: aiContent || result?.draft || content,
@@ -475,6 +474,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       return;
     }
 
+    setDraftId(saveResult.id || draftId);
     setFinalContent(content);
     setEditedContentState(editedContent || content);
     setLifecycleStatus("finalized");
@@ -490,6 +490,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     const saveResult = await unfinalizeRecordDraft({
       mode,
       studentId: selectedStudent?.id,
+      draftId,
       payload: buildPayload(),
       result,
       aiContent: aiContent || result?.draft || content,
@@ -502,6 +503,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       return;
     }
 
+    setDraftId(saveResult.id || draftId);
     setFinalContent("");
     setEditedContentState(content);
     setLifecycleStatus("saved");

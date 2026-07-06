@@ -30,6 +30,7 @@ type StudentSubjectInput = {
   improvements: string[];
   observationMemo: string;
   status: BulkStatus;
+  draftId: string;
   result: GenerateResponse | null;
   aiContent: string;
   editedContent: string;
@@ -67,6 +68,7 @@ function makeInitialStudentInput(): StudentSubjectInput {
     improvements: [],
     observationMemo: "",
     status: "waiting",
+    draftId: "",
     result: null,
     aiContent: "",
     editedContent: "",
@@ -693,6 +695,7 @@ export function BulkSubjectCommentComposer() {
           ...(resetResult
             ? {
                 status: "waiting" as BulkStatus,
+                draftId: "",
                 result: null,
                 aiContent: "",
                 editedContent: "",
@@ -943,7 +946,7 @@ export function BulkSubjectCommentComposer() {
 
   async function generateForStudents(
     targetStudents: Student[],
-    options: { includeCompleted?: boolean; includeFinalized?: boolean; saveMode?: "insert" | "replace-latest" } = {}
+    options: { includeCompleted?: boolean; includeFinalized?: boolean } = {}
   ) {
     if (targetStudents.length > maxSelectableStudents) {
       setMessage(selectionLimitMessage);
@@ -955,7 +958,6 @@ export function BulkSubjectCommentComposer() {
       return;
     }
 
-    const saveMode = options.saveMode || "insert";
     const inputSnapshot = new Map(targetStudents.map((student) => [student.id, studentInputs[student.id] || makeInitialStudentInput()]));
     const finalizedSkippedCount = targetStudents.filter((student) => {
       const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
@@ -1002,6 +1004,7 @@ export function BulkSubjectCommentComposer() {
         next[student.id] = {
           ...(next[student.id] || makeInitialStudentInput()),
           status: "queued",
+          draftId: "",
           result: null,
           aiContent: "",
           editedContent: "",
@@ -1043,8 +1046,7 @@ export function BulkSubjectCommentComposer() {
           mode: "subject",
           studentId: student.id,
           payload,
-          result,
-          saveMode
+          result
         });
 
         if (saveResult.error) {
@@ -1053,6 +1055,7 @@ export function BulkSubjectCommentComposer() {
             [student.id]: {
               ...(current[student.id] || makeInitialStudentInput()),
               status: "failed",
+              draftId: "",
               result,
               aiContent: result.draft || "",
               editedContent: result.draft || "",
@@ -1076,6 +1079,7 @@ export function BulkSubjectCommentComposer() {
           [student.id]: {
             ...(current[student.id] || makeInitialStudentInput()),
             status: "completed",
+            draftId: saveResult.id || current[student.id]?.draftId || "",
             result,
             aiContent: result.draft,
             editedContent: result.draft,
@@ -1088,7 +1092,7 @@ export function BulkSubjectCommentComposer() {
             isRegenerating: false,
             quality: null,
             error: "",
-            savedMessage: saveMode === "replace-latest" ? "record_drafts 최신 초안 업데이트 완료" : "record_drafts 저장 완료"
+            savedMessage: saveResult.action === "updated" ? "record_drafts 현재본 업데이트 완료" : "record_drafts 현재본 저장 완료"
           }
         }));
         generatedDrafts.push({
@@ -1166,6 +1170,7 @@ export function BulkSubjectCommentComposer() {
     const saveResult = await saveEditedRecordDraft({
       mode: "subject",
       studentId: student.id,
+      draftId: input.draftId,
       payload: buildPayload(student, input),
       result: input.result,
       aiContent: input.aiContent || input.result?.draft || content,
@@ -1191,6 +1196,7 @@ export function BulkSubjectCommentComposer() {
         [student.id]: {
           ...previous,
           editedContent: content,
+          draftId: saveResult.id || previous.draftId,
           lifecycleStatus: "saved",
           lastSavedEditedContent: content,
           isSavingDraft: false,
@@ -1222,6 +1228,7 @@ export function BulkSubjectCommentComposer() {
     const saveResult = await finalizeRecordDraft({
       mode: "subject",
       studentId: student.id,
+      draftId: input.draftId,
       payload: buildPayload(student, input),
       result: input.result,
       aiContent: input.aiContent || input.result?.draft || content,
@@ -1248,6 +1255,7 @@ export function BulkSubjectCommentComposer() {
           ...previous,
           editedContent: previous.editedContent || content,
           finalContent: content,
+          draftId: saveResult.id || previous.draftId,
           lifecycleStatus: "finalized",
           lastSavedEditedContent: previous.editedContent || content,
           isSavingDraft: false,
@@ -1274,6 +1282,7 @@ export function BulkSubjectCommentComposer() {
     const saveResult = await unfinalizeRecordDraft({
       mode: "subject",
       studentId: student.id,
+      draftId: input.draftId,
       payload: buildPayload(student, input),
       result: input.result,
       aiContent: input.aiContent || input.result?.draft || content,
@@ -1299,6 +1308,7 @@ export function BulkSubjectCommentComposer() {
           ...previous,
           editedContent: content,
           finalContent: "",
+          draftId: saveResult.id || previous.draftId,
           lifecycleStatus: "saved",
           lastSavedEditedContent: content,
           isSavingDraft: false,
@@ -1425,11 +1435,13 @@ export function BulkSubjectCommentComposer() {
     const saveResult = await saveEditedRecordDraft({
       mode: "subject",
       studentId: student.id,
+      draftId: input.draftId,
       payload: buildPayload(student, input),
       result: input.pendingRegeneration,
       aiContent: nextAiContent,
       editedContent: nextEditedContent,
-      status: "saved"
+      status: "saved",
+      allowFinalizedUpdate: true
     });
 
     setStudentInputs((current) => {
@@ -1450,6 +1462,7 @@ export function BulkSubjectCommentComposer() {
         ...current,
         [student.id]: {
           ...previous,
+          draftId: saveResult.id || previous.draftId,
           lastSavedEditedContent: nextEditedContent,
           isSavingDraft: false,
           savedMessage: "새 AI 결과를 교사 수정본으로 저장했습니다."

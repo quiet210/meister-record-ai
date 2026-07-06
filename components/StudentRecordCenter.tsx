@@ -27,11 +27,10 @@ import { gradeOptions } from "@/lib/options";
 import type { CommentMode, GenerateResponse, Student } from "@/lib/types";
 
 type ContentTab = "ai" | "edited" | "final";
-type DraftByMode = Partial<Record<CommentMode, StudentRecordDraft>>;
-type DraftHistoriesByMode = Record<CommentMode, StudentRecordDraft[]>;
 type DraftIndexEntry = {
-  latest: DraftByMode;
-  histories: DraftHistoriesByMode;
+  subjectDrafts: StudentRecordDraft[];
+  behaviorDraft?: StudentRecordDraft;
+  histories: Record<string, StudentRecordDraft[]>;
 };
 type ActionState = "copy" | "regenerate" | "use-regenerated" | "finalize" | "unfinalize";
 
@@ -72,18 +71,23 @@ function getTabContent(draft: StudentRecordDraft, tab: ContentTab) {
   return draft.aiContent || draft.draftText || "";
 }
 
-function getRecordKey(studentId: string, mode: CommentMode) {
-  return `${studentId}:${mode}`;
+function getRecordKey(studentId: string, mode: CommentMode, draftId = "empty") {
+  return `${studentId}:${mode}:${draftId}`;
 }
 
 function makeDraftIndexEntry(): DraftIndexEntry {
   return {
-    latest: {},
-    histories: {
-      subject: [],
-      behavior: []
-    }
+    subjectDrafts: [],
+    histories: {}
   };
+}
+
+function getSubjectStatus(drafts?: StudentRecordDraft[]) {
+  if (!drafts || drafts.length === 0) return undefined;
+  if (drafts.some((draft) => draft.status === "finalized")) return "finalized";
+  if (drafts.some((draft) => draft.status === "saved")) return "saved";
+  if (drafts.some((draft) => draft.status === "editing")) return "editing";
+  return drafts[0]?.status;
 }
 
 function buildTimeline(history: StudentRecordDraft[]) {
@@ -197,11 +201,17 @@ export function StudentRecordCenter() {
 
     drafts.forEach((draft) => {
       const entry = index.get(draft.studentId) || makeDraftIndexEntry();
-      entry.histories[draft.mode].push(draft);
-      if (!entry.latest[draft.mode]) {
-        entry.latest[draft.mode] = draft;
+      entry.histories[draft.id] = [draft];
+      if (draft.mode === "subject") {
+        entry.subjectDrafts.push(draft);
+      } else if (!entry.behaviorDraft) {
+        entry.behaviorDraft = draft;
       }
       index.set(draft.studentId, entry);
+    });
+
+    index.forEach((entry) => {
+      entry.subjectDrafts.sort((a, b) => (a.subjectName || "").localeCompare(b.subjectName || "", "ko-KR"));
     });
 
     return index;
@@ -215,13 +225,9 @@ export function StudentRecordCenter() {
   );
 
   const selectedDraftEntry = useMemo(() => (selectedStudent ? draftIndex.get(selectedStudent.id) : undefined), [draftIndex, selectedStudent]);
-  const selectedDrafts = useMemo<DraftByMode>(() => {
-    return selectedDraftEntry?.latest || {};
-  }, [selectedDraftEntry]);
-
-  const selectedHistories = useMemo(() => {
-    return selectedDraftEntry?.histories || makeDraftIndexEntry().histories;
-  }, [selectedDraftEntry]);
+  const selectedSubjectDrafts = selectedDraftEntry?.subjectDrafts || [];
+  const selectedBehaviorDraft = selectedDraftEntry?.behaviorDraft;
+  const selectedHistories = selectedDraftEntry?.histories || {};
 
   const selectStudent = useCallback((studentId: string) => {
     setSelectedStudentId(studentId);
@@ -242,7 +248,7 @@ export function StudentRecordCenter() {
   }
 
   async function copyDraft(studentId: string, mode: CommentMode, draft: StudentRecordDraft) {
-    const key = getRecordKey(studentId, mode);
+    const key = getRecordKey(studentId, mode, draft.id);
     const content = getEffectiveRecordContent({
       finalContent: draft.finalContent,
       editedContent: draft.editedContent,
@@ -259,7 +265,7 @@ export function StudentRecordCenter() {
   }
 
   async function regenerateDraft(studentId: string, mode: CommentMode, draft: StudentRecordDraft) {
-    const key = getRecordKey(studentId, mode);
+    const key = getRecordKey(studentId, mode, draft.id);
     if (!draft.inputPayload) {
       setCardMessage(key, "AI 다시 생성에 사용할 입력 payload가 없습니다.");
       return;
@@ -294,8 +300,8 @@ export function StudentRecordCenter() {
     }
   }
 
-  function keepCurrentDraft(studentId: string, mode: CommentMode) {
-    const key = getRecordKey(studentId, mode);
+  function keepCurrentDraft(studentId: string, mode: CommentMode, draftId: string) {
+    const key = getRecordKey(studentId, mode, draftId);
     setPendingRegenerations((current) => ({
       ...current,
       [key]: null
@@ -304,7 +310,7 @@ export function StudentRecordCenter() {
   }
 
   async function useRegeneratedDraft(studentId: string, mode: CommentMode, draft: StudentRecordDraft) {
-    const key = getRecordKey(studentId, mode);
+    const key = getRecordKey(studentId, mode, draft.id);
     const pendingResult = pendingRegenerations[key];
     if (!pendingResult?.draft || !draft.inputPayload) return;
 
@@ -312,11 +318,13 @@ export function StudentRecordCenter() {
     const saveResult = await saveEditedRecordDraft({
       mode,
       studentId,
+      draftId: draft.id,
       payload: draft.inputPayload,
       result: pendingResult,
       aiContent: draft.aiContent || draft.draftText || pendingResult.draft,
       editedContent: pendingResult.draft,
-      status: "saved"
+      status: "saved",
+      allowFinalizedUpdate: true
     });
 
     setAction(key, "");
@@ -334,7 +342,7 @@ export function StudentRecordCenter() {
   }
 
   async function finalizeDraft(studentId: string, mode: CommentMode, draft: StudentRecordDraft) {
-    const key = getRecordKey(studentId, mode);
+    const key = getRecordKey(studentId, mode, draft.id);
     const finalContent = getEffectiveRecordContent({
       finalContent: draft.finalContent,
       editedContent: draft.editedContent,
@@ -348,6 +356,7 @@ export function StudentRecordCenter() {
     const saveResult = await finalizeRecordDraft({
       mode,
       studentId,
+      draftId: draft.id,
       payload: draft.inputPayload,
       result: draft.resultPayload,
       aiContent: draft.aiContent || draft.draftText || finalContent,
@@ -366,7 +375,7 @@ export function StudentRecordCenter() {
   }
 
   async function unfinalizeDraft(studentId: string, mode: CommentMode, draft: StudentRecordDraft) {
-    const key = getRecordKey(studentId, mode);
+    const key = getRecordKey(studentId, mode, draft.id);
     const editedContent = draft.editedContent || draft.finalContent || draft.aiContent || draft.draftText;
 
     if (!draft.inputPayload || !editedContent) return;
@@ -375,6 +384,7 @@ export function StudentRecordCenter() {
     const saveResult = await unfinalizeRecordDraft({
       mode,
       studentId,
+      draftId: draft.id,
       payload: draft.inputPayload,
       result: draft.resultPayload,
       aiContent: draft.aiContent || draft.draftText || editedContent,
@@ -475,7 +485,7 @@ export function StudentRecordCenter() {
             {!isLoading && filteredStudents.length === 0 ? <div className="p-6 text-center text-sm font-semibold text-slate-500">조건에 맞는 학생이 없습니다.</div> : null}
             {filteredStudents.map((student) => {
               const selected = selectedStudent?.id === student.id;
-              const latestDrafts = draftIndex.get(student.id)?.latest;
+              const studentDraftEntry = draftIndex.get(student.id);
 
               return (
                 <StudentRecordListItem
@@ -483,8 +493,8 @@ export function StudentRecordCenter() {
                   student={student}
                   selected={selected}
                   departmentName={departmentLabel(student.department)}
-                  subjectStatus={latestDrafts?.subject?.status}
-                  behaviorStatus={latestDrafts?.behavior?.status}
+                  subjectStatus={getSubjectStatus(studentDraftEntry?.subjectDrafts)}
+                  behaviorStatus={studentDraftEntry?.behaviorDraft?.status}
                   onSelect={selectStudent}
                 />
               );
@@ -515,45 +525,80 @@ export function StudentRecordCenter() {
                 </div>
               </div>
 
-              <RecordModeCard
-                student={selectedStudent}
-                mode="subject"
-                draft={selectedDrafts.subject}
-                history={selectedHistories.subject}
-                activeTab={activeTabs[getRecordKey(selectedStudent.id, "subject")] || "final"}
-                expanded={openCards[getRecordKey(selectedStudent.id, "subject")] ?? true}
-                pendingRegeneration={pendingRegenerations[getRecordKey(selectedStudent.id, "subject")] || null}
-                actionState={actionStates[getRecordKey(selectedStudent.id, "subject")] || ""}
-                message={messages[getRecordKey(selectedStudent.id, "subject")] || ""}
-                onSetTab={(tab) => setActiveTabs((current) => ({ ...current, [getRecordKey(selectedStudent.id, "subject")]: tab }))}
-                onToggleOpen={() => setOpenCards((current) => ({ ...current, [getRecordKey(selectedStudent.id, "subject")]: !(current[getRecordKey(selectedStudent.id, "subject")] ?? true) }))}
-                onCopy={(draft) => void copyDraft(selectedStudent.id, "subject", draft)}
-                onRegenerate={(draft) => void regenerateDraft(selectedStudent.id, "subject", draft)}
-                onKeepCurrent={() => keepCurrentDraft(selectedStudent.id, "subject")}
-                onUseRegenerated={(draft) => void useRegeneratedDraft(selectedStudent.id, "subject", draft)}
-                onFinalize={(draft) => void finalizeDraft(selectedStudent.id, "subject", draft)}
-                onUnfinalize={(draft) => void unfinalizeDraft(selectedStudent.id, "subject", draft)}
-              />
+              {selectedSubjectDrafts.length === 0 ? (
+                <RecordModeCard
+                  student={selectedStudent}
+                  mode="subject"
+                  draft={undefined}
+                  history={[]}
+                  activeTab={activeTabs[getRecordKey(selectedStudent.id, "subject")] || "final"}
+                  expanded={openCards[getRecordKey(selectedStudent.id, "subject")] ?? true}
+                  pendingRegeneration={pendingRegenerations[getRecordKey(selectedStudent.id, "subject")] || null}
+                  actionState={actionStates[getRecordKey(selectedStudent.id, "subject")] || ""}
+                  message={messages[getRecordKey(selectedStudent.id, "subject")] || ""}
+                  onSetTab={(tab) => setActiveTabs((current) => ({ ...current, [getRecordKey(selectedStudent.id, "subject")]: tab }))}
+                  onToggleOpen={() => setOpenCards((current) => ({ ...current, [getRecordKey(selectedStudent.id, "subject")]: !(current[getRecordKey(selectedStudent.id, "subject")] ?? true) }))}
+                  onCopy={(draft) => void copyDraft(selectedStudent.id, "subject", draft)}
+                  onRegenerate={(draft) => void regenerateDraft(selectedStudent.id, "subject", draft)}
+                  onKeepCurrent={() => undefined}
+                  onUseRegenerated={(draft) => void useRegeneratedDraft(selectedStudent.id, "subject", draft)}
+                  onFinalize={(draft) => void finalizeDraft(selectedStudent.id, "subject", draft)}
+                  onUnfinalize={(draft) => void unfinalizeDraft(selectedStudent.id, "subject", draft)}
+                />
+              ) : (
+                selectedSubjectDrafts.map((draft) => {
+                  const recordKey = getRecordKey(selectedStudent.id, "subject", draft.id);
 
-              <RecordModeCard
-                student={selectedStudent}
-                mode="behavior"
-                draft={selectedDrafts.behavior}
-                history={selectedHistories.behavior}
-                activeTab={activeTabs[getRecordKey(selectedStudent.id, "behavior")] || "final"}
-                expanded={openCards[getRecordKey(selectedStudent.id, "behavior")] ?? true}
-                pendingRegeneration={pendingRegenerations[getRecordKey(selectedStudent.id, "behavior")] || null}
-                actionState={actionStates[getRecordKey(selectedStudent.id, "behavior")] || ""}
-                message={messages[getRecordKey(selectedStudent.id, "behavior")] || ""}
-                onSetTab={(tab) => setActiveTabs((current) => ({ ...current, [getRecordKey(selectedStudent.id, "behavior")]: tab }))}
-                onToggleOpen={() => setOpenCards((current) => ({ ...current, [getRecordKey(selectedStudent.id, "behavior")]: !(current[getRecordKey(selectedStudent.id, "behavior")] ?? true) }))}
-                onCopy={(draft) => void copyDraft(selectedStudent.id, "behavior", draft)}
-                onRegenerate={(draft) => void regenerateDraft(selectedStudent.id, "behavior", draft)}
-                onKeepCurrent={() => keepCurrentDraft(selectedStudent.id, "behavior")}
-                onUseRegenerated={(draft) => void useRegeneratedDraft(selectedStudent.id, "behavior", draft)}
-                onFinalize={(draft) => void finalizeDraft(selectedStudent.id, "behavior", draft)}
-                onUnfinalize={(draft) => void unfinalizeDraft(selectedStudent.id, "behavior", draft)}
-              />
+                  return (
+                    <RecordModeCard
+                      key={draft.id}
+                      student={selectedStudent}
+                      mode="subject"
+                      draft={draft}
+                      history={selectedHistories[draft.id] || [draft]}
+                      activeTab={activeTabs[recordKey] || "final"}
+                      expanded={openCards[recordKey] ?? true}
+                      pendingRegeneration={pendingRegenerations[recordKey] || null}
+                      actionState={actionStates[recordKey] || ""}
+                      message={messages[recordKey] || ""}
+                      onSetTab={(tab) => setActiveTabs((current) => ({ ...current, [recordKey]: tab }))}
+                      onToggleOpen={() => setOpenCards((current) => ({ ...current, [recordKey]: !(current[recordKey] ?? true) }))}
+                      onCopy={(draft) => void copyDraft(selectedStudent.id, "subject", draft)}
+                      onRegenerate={(draft) => void regenerateDraft(selectedStudent.id, "subject", draft)}
+                      onKeepCurrent={() => keepCurrentDraft(selectedStudent.id, "subject", draft.id)}
+                      onUseRegenerated={(draft) => void useRegeneratedDraft(selectedStudent.id, "subject", draft)}
+                      onFinalize={(draft) => void finalizeDraft(selectedStudent.id, "subject", draft)}
+                      onUnfinalize={(draft) => void unfinalizeDraft(selectedStudent.id, "subject", draft)}
+                    />
+                  );
+                })
+              )}
+
+              {(() => {
+                const recordKey = getRecordKey(selectedStudent.id, "behavior", selectedBehaviorDraft?.id || "empty");
+
+                return (
+                  <RecordModeCard
+                    student={selectedStudent}
+                    mode="behavior"
+                    draft={selectedBehaviorDraft}
+                    history={selectedBehaviorDraft ? selectedHistories[selectedBehaviorDraft.id] || [selectedBehaviorDraft] : []}
+                    activeTab={activeTabs[recordKey] || "final"}
+                    expanded={openCards[recordKey] ?? true}
+                    pendingRegeneration={pendingRegenerations[recordKey] || null}
+                    actionState={actionStates[recordKey] || ""}
+                    message={messages[recordKey] || ""}
+                    onSetTab={(tab) => setActiveTabs((current) => ({ ...current, [recordKey]: tab }))}
+                    onToggleOpen={() => setOpenCards((current) => ({ ...current, [recordKey]: !(current[recordKey] ?? true) }))}
+                    onCopy={(draft) => void copyDraft(selectedStudent.id, "behavior", draft)}
+                    onRegenerate={(draft) => void regenerateDraft(selectedStudent.id, "behavior", draft)}
+                    onKeepCurrent={() => selectedBehaviorDraft && keepCurrentDraft(selectedStudent.id, "behavior", selectedBehaviorDraft.id)}
+                    onUseRegenerated={(draft) => void useRegeneratedDraft(selectedStudent.id, "behavior", draft)}
+                    onFinalize={(draft) => void finalizeDraft(selectedStudent.id, "behavior", draft)}
+                    onUnfinalize={(draft) => void unfinalizeDraft(selectedStudent.id, "behavior", draft)}
+                  />
+                );
+              })()}
             </>
           )}
         </section>
@@ -651,6 +696,7 @@ function RecordModeCard({
   onUnfinalize
 }: RecordModeCardProps) {
   const modeInfo = modeMeta[mode];
+  const cardTitle = mode === "subject" && draft?.subjectName ? `${modeInfo.title} · ${draft.subjectName}` : modeInfo.title;
   const statusMeta = getRecordDraftLifecycleStatusMeta(draft?.status || "ai_generated");
   const effectiveContent = draft
     ? getEffectiveRecordContent({
@@ -673,7 +719,7 @@ function RecordModeCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <FileText size={19} className="text-blue-700" aria-hidden="true" />
-            <h3 className="text-xl font-bold text-slate-950">{modeInfo.title}</h3>
+            <h3 className="text-xl font-bold text-slate-950">{cardTitle}</h3>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>
@@ -689,6 +735,16 @@ function RecordModeCard({
             <span className="inline-flex min-h-8 items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-600">
               최종본 {draft?.finalContent ? "있음" : "없음"}
             </span>
+            {draft?.subjectName ? (
+              <span className="inline-flex min-h-8 items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-600">
+                과목 {draft.subjectName}
+              </span>
+            ) : null}
+            {draft ? (
+              <span className="inline-flex min-h-8 items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-600">
+                현재본 v{draft.versionNo}
+              </span>
+            ) : null}
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 text-xs font-semibold text-slate-500 sm:grid-cols-2">
             <p>생성일: {formatDateTime(draft?.createdAt || "")}</p>
