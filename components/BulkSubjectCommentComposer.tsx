@@ -49,6 +49,8 @@ type BulkApplyInput = Pick<StudentSubjectInput, "activityTypes" | "competencies"
 
 const fallbackSettingsOptions = getFallbackSettingsOptions();
 const concurrencyLimit = 3;
+const maxSelectableStudents = 50;
+const selectionLimitMessage = "한 번에 최대 50명까지 선택할 수 있습니다.";
 
 const subjectLengthOptions: Array<{ value: CommentLength; label: string; help: string }> = [
   { value: "short", label: "짧게", help: "250~350자" },
@@ -484,7 +486,7 @@ export function BulkSubjectCommentComposer() {
   const [includeFinalizedInRegeneration, setIncludeFinalizedInRegeneration] = useState(false);
   const [gradeFilter, setGradeFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
-  const [classFilter, setClassFilter] = useState("");
+  const [classFilters, setClassFilters] = useState<string[]>([]);
   const [subjectName, setSubjectName] = useState("");
   const [unit, setUnit] = useState("");
   const [lengthOption, setLengthOption] = useState<CommentLength>("medium");
@@ -550,18 +552,30 @@ export function BulkSubjectCommentComposer() {
   const hasSubjectName = subjectName.trim().length > 0;
 
   const classOptions = useMemo(() => {
-    const classes = students.map((student) => student.className).filter(Boolean);
+    const classes = students
+      .filter((student) => !gradeFilter || student.grade === gradeFilter)
+      .filter((student) => !departmentFilter || student.department === departmentFilter)
+      .map((student) => student.className)
+      .filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [students]);
+  }, [departmentFilter, gradeFilter, students]);
+
+  useEffect(() => {
+    setClassFilters((current) => {
+      const validClassOptions = new Set(classOptions);
+      const next = current.filter((className) => validClassOptions.has(className));
+      return next.length === current.length ? current : next;
+    });
+  }, [classOptions]);
 
   const filteredStudents = useMemo(
     () =>
       students
         .filter((student) => !gradeFilter || student.grade === gradeFilter)
         .filter((student) => !departmentFilter || student.department === departmentFilter)
-        .filter((student) => !classFilter || student.className === classFilter),
-    [classFilter, departmentFilter, gradeFilter, students]
+        .filter((student) => classFilters.length === 0 || classFilters.includes(student.className)),
+    [classFilters, departmentFilter, gradeFilter, students]
   );
 
   const selectedStudents = useMemo(() => students.filter((student) => selectedStudentIdSet.has(student.id)), [selectedStudentIdSet, students]);
@@ -623,7 +637,9 @@ export function BulkSubjectCommentComposer() {
     () => filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id)),
     [filteredStudents, selectedStudentIdSet]
   );
-  const canGenerate = hasSubjectName && readySelectedCount > 0 && !isGenerating;
+  const selectedCountOverLimit = selectedStudents.length > maxSelectableStudents;
+  const canGenerate = hasSubjectName && readySelectedCount > 0 && !isGenerating && !selectedCountOverLimit;
+  const allClassesSelected = classOptions.length > 0 && classOptions.every((className) => classFilters.includes(className));
   const subjectResultExportRows = useMemo<SubjectCommentResultExportRow[]>(
     () =>
       selectedStudents.flatMap((student) => {
@@ -697,9 +713,34 @@ export function BulkSubjectCommentComposer() {
     });
   }, []);
 
-  const toggleStudent = useCallback((studentId: string) => {
-    setSelectedStudentIds((current) => (current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]));
+  const toggleClassFilter = useCallback((className: string) => {
+    setClassFilters((current) => (current.includes(className) ? current.filter((value) => value !== className) : [...current, className]));
   }, []);
+
+  const selectAllClasses = useCallback(() => {
+    setClassFilters(classOptions);
+  }, [classOptions]);
+
+  const clearClassFilters = useCallback(() => {
+    setClassFilters([]);
+  }, []);
+
+  const toggleStudent = useCallback(
+    (studentId: string) => {
+      if (selectedStudentIds.includes(studentId)) {
+        setSelectedStudentIds((current) => current.filter((id) => id !== studentId));
+        return;
+      }
+
+      if (selectedStudents.length >= maxSelectableStudents) {
+        setMessage(selectionLimitMessage);
+        return;
+      }
+
+      setSelectedStudentIds((current) => (current.includes(studentId) ? current : [...current, studentId]));
+    },
+    [selectedStudentIds, selectedStudents.length]
+  );
 
   const toggleFilteredStudents = useCallback(() => {
     if (allFilteredSelected) {
@@ -708,8 +749,15 @@ export function BulkSubjectCommentComposer() {
       return;
     }
 
-    setSelectedStudentIds((current) => Array.from(new Set([...current, ...filteredStudents.map((student) => student.id)])));
-  }, [allFilteredSelected, filteredStudents]);
+    const filteredIds = filteredStudents.map((student) => student.id);
+    const missingFilteredIds = filteredIds.filter((id) => !selectedStudentIdSet.has(id));
+    if (filteredStudents.length > maxSelectableStudents || selectedStudents.length + missingFilteredIds.length > maxSelectableStudents) {
+      setMessage(selectionLimitMessage);
+      return;
+    }
+
+    setSelectedStudentIds((current) => Array.from(new Set([...current, ...filteredIds])));
+  }, [allFilteredSelected, filteredStudents, selectedStudentIdSet, selectedStudents.length]);
 
   const clearSelection = useCallback(() => {
     setSelectedStudentIds([]);
@@ -897,6 +945,11 @@ export function BulkSubjectCommentComposer() {
     targetStudents: Student[],
     options: { includeCompleted?: boolean; includeFinalized?: boolean; saveMode?: "insert" | "replace-latest" } = {}
   ) {
+    if (targetStudents.length > maxSelectableStudents) {
+      setMessage(selectionLimitMessage);
+      return;
+    }
+
     if (!subjectName.trim()) {
       setMessage("과목명을 입력하세요.");
       return;
@@ -1256,6 +1309,11 @@ export function BulkSubjectCommentComposer() {
   }
 
   async function regenerateAiForStudents(targetStudents: Student[], options: { includeFinalized?: boolean } = {}) {
+    if (targetStudents.length > maxSelectableStudents) {
+      setMessage(selectionLimitMessage);
+      return;
+    }
+
     if (!subjectName.trim()) {
       setMessage("과목명을 입력하세요.");
       return;
@@ -1410,11 +1468,21 @@ export function BulkSubjectCommentComposer() {
   }
 
   async function generateSingleStudent(student: Student) {
+    if (!selectedStudentIdSet.has(student.id) && selectedStudents.length >= maxSelectableStudents) {
+      setMessage(selectionLimitMessage);
+      return;
+    }
+
     setSelectedStudentIds((current) => (current.includes(student.id) ? current : [...current, student.id]));
     await generateForStudents([student]);
   }
 
   async function regenerateSingleStudent(student: Student) {
+    if (!selectedStudentIdSet.has(student.id) && selectedStudents.length >= maxSelectableStudents) {
+      setMessage(selectionLimitMessage);
+      return;
+    }
+
     setSelectedStudentIds((current) => (current.includes(student.id) ? current : [...current, student.id]));
     await regenerateAiForStudents([student], { includeFinalized: includeFinalizedInRegeneration });
   }
@@ -1512,7 +1580,9 @@ export function BulkSubjectCommentComposer() {
         <div className="grid w-full grid-cols-4 gap-2 rounded-md border border-slate-200 bg-white p-3 text-center shadow-sm sm:w-auto">
           <div>
             <p className="text-xs font-semibold text-slate-500">선택</p>
-            <p className="mt-1 text-sm font-bold text-slate-900">{selectedStudents.length}</p>
+            <p className={`mt-1 text-sm font-bold ${selectedCountOverLimit ? "text-rose-700" : "text-slate-900"}`}>
+              {selectedStudents.length} / {maxSelectableStudents}
+            </p>
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-500">대기</p>
@@ -1612,18 +1682,18 @@ export function BulkSubjectCommentComposer() {
           <div className="flex flex-wrap gap-2">
             <button className="secondary-button" type="button" onClick={toggleFilteredStudents} disabled={filteredStudents.length === 0 || isGenerating}>
               <UsersRound size={17} aria-hidden="true" />
-              {allFilteredSelected ? "필터 선택 해제" : "전체 선택"}
+              {allFilteredSelected ? "필터 학생 선택 해제" : "필터 학생 전체 선택"}
             </button>
             <button className="secondary-button" type="button" onClick={clearSelection} disabled={selectedStudents.length === 0 || isGenerating}>
-              선택 초기화
+              학생 선택 초기화
             </button>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="space-y-2">
             <span className="field-label">학년</span>
-            <select className="input-base" value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
+            <select className="input-base" value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} disabled={isGenerating}>
               <option value="">전체</option>
               {gradeOptions.map((option) => (
                 <option key={option}>{option}</option>
@@ -1633,7 +1703,7 @@ export function BulkSubjectCommentComposer() {
 
           <label className="space-y-2">
             <span className="field-label">학과</span>
-            <select className="input-base" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
+            <select className="input-base" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} disabled={isGenerating}>
               <option value="">전체</option>
               {departmentOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -1643,15 +1713,41 @@ export function BulkSubjectCommentComposer() {
             </select>
           </label>
 
-          <label className="space-y-2">
-            <span className="field-label">반</span>
-            <select className="input-base" value={classFilter} onChange={(event) => setClassFilter(event.target.value)}>
-              <option value="">전체</option>
-              {classOptions.map((option) => (
-                <option key={option}>{option}</option>
-              ))}
-            </select>
-          </label>
+          <fieldset className="space-y-2 md:col-span-2">
+            <legend className="field-label">반 다중 선택</legend>
+            <div className="flex flex-wrap gap-2">
+              <button className="secondary-button min-h-9 px-3 py-1.5 text-xs" type="button" onClick={selectAllClasses} disabled={classOptions.length === 0 || isGenerating || allClassesSelected}>
+                전체 반 선택
+              </button>
+              <button className="secondary-button min-h-9 px-3 py-1.5 text-xs" type="button" onClick={clearClassFilters} disabled={classFilters.length === 0 || isGenerating}>
+                선택 초기화
+              </button>
+            </div>
+            {classOptions.length === 0 ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-500">선택 가능한 반이 없습니다.</div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {classOptions.map((className) => {
+                  const selected = classFilters.includes(className);
+                  return (
+                    <button
+                      key={className}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => toggleClassFilter(className)}
+                      disabled={isGenerating}
+                      className={`min-h-8 rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
+                        selected ? "border-blue-600 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-600 hover:border-blue-200"
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      {className}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <p className="field-help">반을 선택하지 않으면 학년과 학과 조건에 맞는 모든 반 학생을 표시합니다.</p>
+          </fieldset>
         </div>
       </section>
 
@@ -1659,7 +1755,9 @@ export function BulkSubjectCommentComposer() {
         <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-950">학생별 입력 테이블</h2>
-            <p className="mt-1 text-sm text-slate-500">필터 결과 {filteredStudents.length}명 중 {selectedStudents.length}명을 선택했습니다.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              필터 결과 {filteredStudents.length}명 · 선택 {selectedStudents.length}명 / 최대 {maxSelectableStudents}명
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button className="primary-button" type="button" onClick={generateSelectedStudents} disabled={!canGenerate}>
@@ -1679,6 +1777,10 @@ export function BulkSubjectCommentComposer() {
             {selectedStudents.length === 0 ? "생성할 학생을 선택하세요." : ""}
           </div>
         ) : null}
+
+        <div className={`border-b border-slate-200 px-5 py-3 text-sm font-semibold ${selectedCountOverLimit ? "bg-rose-50 text-rose-800" : "bg-blue-50 text-blue-800"}`}>
+          {selectionLimitMessage}
+        </div>
 
         {message ? <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700">{message}</div> : null}
 
