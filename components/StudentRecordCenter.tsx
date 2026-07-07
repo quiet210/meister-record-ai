@@ -180,10 +180,18 @@ export function StudentRecordCenter() {
   const departmentOptions = settingsOptions.departmentOptions;
   const departmentLabelMap = useMemo(() => new Map(departmentOptions.map((option) => [option.value, option.label])), [departmentOptions]);
   const departmentLabel = useCallback((value: string) => departmentLabelMap.get(value) || value, [departmentLabelMap]);
-  const hasStudentLookupCriteria = Boolean(gradeFilter && departmentFilter);
+  const hasStudentBaseCriteria = Boolean(departmentFilter && gradeFilter);
+  const hasStudentLookupCriteria = hasStudentBaseCriteria && classFilters.length > 0;
+
+  const studentGradeOptions = useMemo(() => {
+    if (!departmentFilter) return [];
+
+    const grades = new Set(students.filter((student) => student.department === departmentFilter).map((student) => student.grade));
+    return gradeOptions.filter((option) => grades.has(option));
+  }, [departmentFilter, students]);
 
   const classOptions = useMemo(() => {
-    if (!hasStudentLookupCriteria) return [];
+    if (!hasStudentBaseCriteria) return [];
 
     const classes = students
       .filter((student) => student.grade === gradeFilter)
@@ -192,7 +200,7 @@ export function StudentRecordCenter() {
       .filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [departmentFilter, gradeFilter, hasStudentLookupCriteria, students]);
+  }, [departmentFilter, gradeFilter, hasStudentBaseCriteria, students]);
 
   useEffect(() => {
     setClassFilters((current) => {
@@ -471,16 +479,17 @@ export function StudentRecordCenter() {
               </label>
               <StudentFilter
                 title="학생 조회"
-                description="학년과 학과를 선택한 뒤 학생을 선택합니다."
+                description="학과, 학년, 반을 선택한 뒤 학생을 선택합니다."
                 grade={gradeFilter}
                 department={departmentFilter}
                 selectedClasses={classFilters}
-                gradeOptions={gradeOptions}
+                gradeOptions={studentGradeOptions}
                 departmentOptions={departmentOptions}
                 classOptions={classOptions}
                 onGradeChange={setGradeFilter}
                 onDepartmentChange={setDepartmentFilter}
                 onSelectedClassesChange={setClassFilters}
+                onFilterChange={() => setSelectedStudentId("")}
                 disabled={isLoading}
               />
             </div>
@@ -493,8 +502,11 @@ export function StudentRecordCenter() {
                 학생부 데이터 로딩 중
               </div>
             ) : null}
-            {!isLoading && !hasStudentLookupCriteria ? (
-              <div className="p-6 text-center text-sm font-semibold text-slate-500">학년과 학과를 선택하면 학생을 조회할 수 있습니다.</div>
+            {!isLoading && !hasStudentBaseCriteria ? (
+              <div className="p-6 text-center text-sm font-semibold text-slate-500">학과, 학년, 반을 선택하면 학생을 조회할 수 있습니다.</div>
+            ) : null}
+            {!isLoading && hasStudentBaseCriteria && !hasStudentLookupCriteria ? (
+              <div className="p-6 text-center text-sm font-semibold text-slate-500">반을 선택하면 학생 목록이 표시됩니다.</div>
             ) : null}
             {!isLoading && hasStudentLookupCriteria && filteredStudents.length === 0 ? (
               <div className="p-6 text-center text-sm font-semibold text-slate-500">조건에 맞는 학생이 없습니다.</div>

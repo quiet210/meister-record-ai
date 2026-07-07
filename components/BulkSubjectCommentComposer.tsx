@@ -553,10 +553,18 @@ export function BulkSubjectCommentComposer() {
   const selectedStudentIdSet = useMemo(() => new Set(selectedStudentIds), [selectedStudentIds]);
   const qualitySelectedStudentIdSet = useMemo(() => new Set(qualitySelectedStudentIds), [qualitySelectedStudentIds]);
   const hasSubjectName = subjectName.trim().length > 0;
-  const hasStudentLookupCriteria = Boolean(gradeFilter && departmentFilter);
+  const hasStudentBaseCriteria = Boolean(departmentFilter && gradeFilter);
+  const hasStudentLookupCriteria = hasStudentBaseCriteria && classFilters.length > 0;
+
+  const studentGradeOptions = useMemo(() => {
+    if (!departmentFilter) return [];
+
+    const grades = new Set(students.filter((student) => student.department === departmentFilter).map((student) => student.grade));
+    return gradeOptions.filter((option) => grades.has(option));
+  }, [departmentFilter, students]);
 
   const classOptions = useMemo(() => {
-    if (!hasStudentLookupCriteria) return [];
+    if (!hasStudentBaseCriteria) return [];
 
     const classes = students
       .filter((student) => student.grade === gradeFilter)
@@ -565,7 +573,7 @@ export function BulkSubjectCommentComposer() {
       .filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [departmentFilter, gradeFilter, hasStudentLookupCriteria, students]);
+  }, [departmentFilter, gradeFilter, hasStudentBaseCriteria, students]);
 
   useEffect(() => {
     setClassFilters((current) => {
@@ -646,6 +654,12 @@ export function BulkSubjectCommentComposer() {
     () => filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id)),
     [filteredStudents, selectedStudentIdSet]
   );
+
+  useEffect(() => {
+    if (hasStudentLookupCriteria) return;
+    setSelectedStudentIds((current) => (current.length === 0 ? current : []));
+  }, [hasStudentLookupCriteria]);
+
   const selectedCountOverLimit = selectedStudents.length > maxSelectableStudents;
   const canGenerate = hasStudentLookupCriteria && hasSubjectName && readySelectedCount > 0 && !isGenerating && !selectedCountOverLimit;
   const subjectResultExportRows = useMemo<SubjectCommentResultExportRow[]>(
@@ -1680,7 +1694,7 @@ export function BulkSubjectCommentComposer() {
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-950">학생 조회</h2>
-            <p className="mt-1 text-sm text-slate-500">학년과 학과를 선택하면 학생 입력 테이블이 표시됩니다.</p>
+            <p className="mt-1 text-sm text-slate-500">학과, 학년, 반을 선택하면 학생 입력 테이블이 표시됩니다.</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -1697,16 +1711,17 @@ export function BulkSubjectCommentComposer() {
         <StudentFilter
           className="mt-4"
           title="조회 조건"
-          description="학년과 학과는 필수이며, 반은 필요할 때 여러 개 선택할 수 있습니다."
+          description="학과, 학년, 반을 순서대로 선택합니다. 반은 여러 개 선택할 수 있습니다."
           grade={gradeFilter}
           department={departmentFilter}
           selectedClasses={classFilters}
-          gradeOptions={gradeOptions}
+          gradeOptions={studentGradeOptions}
           departmentOptions={departmentOptions}
           classOptions={classOptions}
           onGradeChange={setGradeFilter}
           onDepartmentChange={setDepartmentFilter}
           onSelectedClassesChange={setClassFilters}
+          onFilterChange={clearSelection}
           disabled={isGenerating}
         />
       </section>
@@ -1731,8 +1746,10 @@ export function BulkSubjectCommentComposer() {
           </div>
         </div>
 
-        {!hasStudentLookupCriteria ? (
-          <div className="p-6 text-center text-sm font-semibold text-slate-500">학년과 학과를 선택하면 학생을 조회할 수 있습니다.</div>
+        {!hasStudentBaseCriteria ? (
+          <div className="p-6 text-center text-sm font-semibold text-slate-500">학과, 학년, 반을 선택하면 학생을 조회할 수 있습니다.</div>
+        ) : !hasStudentLookupCriteria ? (
+          <div className="p-6 text-center text-sm font-semibold text-slate-500">반을 선택하면 학생 목록이 표시됩니다.</div>
         ) : (
           <>
             {!hasSubjectName || selectedStudents.length === 0 ? (

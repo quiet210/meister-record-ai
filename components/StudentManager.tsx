@@ -174,8 +174,18 @@ export function StudentManager() {
     return departmentOptions.find((option) => option.value === value)?.label || value;
   }
 
+  const studentGradeOptions = useMemo(() => {
+    if (!departmentFilter) return [];
+
+    const grades = new Set(students.filter((student) => student.department === departmentFilter).map((student) => student.grade));
+    return gradeOptions.filter((option) => grades.has(option));
+  }, [departmentFilter, students]);
+
+  const hasStudentBaseFilters = Boolean(departmentFilter && gradeFilter);
+  const hasStudentListFilters = hasStudentBaseFilters && classFilters.length > 0;
+
   const classOptions = useMemo(() => {
-    if (!gradeFilter || !departmentFilter) return [];
+    if (!hasStudentBaseFilters) return [];
 
     const classes = students
       .filter((student) => student.grade === gradeFilter)
@@ -183,7 +193,7 @@ export function StudentManager() {
       .map((student) => student.className)
       .filter(Boolean);
     return sortClassNames(Array.from(new Set(classes)));
-  }, [departmentFilter, gradeFilter, students]);
+  }, [departmentFilter, gradeFilter, hasStudentBaseFilters, students]);
 
   useEffect(() => {
     setClassFilters((current) => {
@@ -192,8 +202,6 @@ export function StudentManager() {
       return next.length === current.length ? current : next;
     });
   }, [classOptions]);
-
-  const hasStudentListFilters = Boolean(gradeFilter && departmentFilter);
 
   const gradeDepartmentStudents = useMemo(() => {
     if (!hasStudentListFilters) return [];
@@ -511,11 +519,11 @@ export function StudentManager() {
 
             <StudentFilter
               title="학생 조회"
-              description="학년과 학과를 선택하면 목록이 표시되고, 반은 여러 개 선택할 수 있습니다."
+              description="학과, 학년, 반을 선택하면 목록이 표시됩니다. 반은 여러 개 선택할 수 있습니다."
               grade={gradeFilter}
               department={departmentFilter}
               selectedClasses={classFilters}
-              gradeOptions={gradeOptions}
+              gradeOptions={studentGradeOptions}
               departmentOptions={departmentOptions}
               classOptions={classOptions}
               onGradeChange={(value) => setGradeFilter(value as Student["grade"] | "")}
@@ -528,10 +536,12 @@ export function StudentManager() {
 
         {isLoading ? (
           <div className="p-5 text-sm text-slate-500">학생 목록을 불러오는 중입니다.</div>
+        ) : !hasStudentBaseFilters ? (
+          <div className="p-5 text-sm leading-6 text-slate-500">학과, 학년, 반을 선택하면 학생을 조회할 수 있습니다.</div>
         ) : !hasStudentListFilters ? (
-          <div className="p-5 text-sm leading-6 text-slate-500">학년과 학과를 선택하면 학생을 조회할 수 있습니다.</div>
+          <div className="p-5 text-sm leading-6 text-slate-500">반을 선택하면 학생 목록이 표시됩니다.</div>
         ) : gradeDepartmentStudents.length === 0 ? (
-          <div className="p-5 text-sm leading-6 text-slate-500">선택한 학년/학과/반 조건에 맞는 학생이 없습니다.</div>
+          <div className="p-5 text-sm leading-6 text-slate-500">선택한 학과/학년/반 조건에 맞는 학생이 없습니다.</div>
         ) : filteredStudents.length === 0 ? (
           <div className="p-5 text-sm leading-6 text-slate-500">검색 조건에 맞는 학생이 없습니다.</div>
         ) : (

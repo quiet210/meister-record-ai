@@ -595,10 +595,18 @@ export function BulkBehaviorCommentComposer() {
   }, [settingsOptions]);
   const selectedStudentIdSet = useMemo(() => new Set(selectedStudentIds), [selectedStudentIds]);
   const qualitySelectedStudentIdSet = useMemo(() => new Set(qualitySelectedStudentIds), [qualitySelectedStudentIds]);
-  const hasStudentLookupCriteria = Boolean(gradeFilter && departmentFilter);
+  const hasStudentBaseCriteria = Boolean(departmentFilter && gradeFilter);
+  const hasStudentLookupCriteria = hasStudentBaseCriteria && classFilters.length > 0;
+
+  const studentGradeOptions = useMemo(() => {
+    if (!departmentFilter) return [];
+
+    const grades = new Set(students.filter((student) => student.department === departmentFilter).map((student) => student.grade));
+    return gradeOptions.filter((option) => grades.has(option));
+  }, [departmentFilter, students]);
 
   const classOptions = useMemo(() => {
-    if (!hasStudentLookupCriteria) return [];
+    if (!hasStudentBaseCriteria) return [];
 
     const classes = students
       .filter((student) => student.grade === gradeFilter)
@@ -607,7 +615,7 @@ export function BulkBehaviorCommentComposer() {
       .filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [departmentFilter, gradeFilter, hasStudentLookupCriteria, students]);
+  }, [departmentFilter, gradeFilter, hasStudentBaseCriteria, students]);
 
   useEffect(() => {
     setClassFilters((current) => {
@@ -688,6 +696,12 @@ export function BulkBehaviorCommentComposer() {
     () => filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id)),
     [filteredStudents, selectedStudentIdSet]
   );
+
+  useEffect(() => {
+    if (hasStudentLookupCriteria) return;
+    setSelectedStudentIds((current) => (current.length === 0 ? current : []));
+  }, [hasStudentLookupCriteria]);
+
   const canGenerate = hasStudentLookupCriteria && readySelectedCount > 0 && !isGenerating;
   const behaviorResultExportRows = useMemo<BehaviorCommentResultExportRow[]>(
     () =>
@@ -1641,22 +1655,23 @@ export function BulkBehaviorCommentComposer() {
       <section className="panel p-5">
         <div>
           <h2 className="text-lg font-bold text-slate-950">공통 설정</h2>
-          <p className="mt-1 text-sm text-slate-500">학생 조회 조건과 생성 톤을 정합니다.</p>
+          <p className="mt-1 text-sm text-slate-500">학과, 학년, 반 조회 조건과 생성 톤을 정합니다.</p>
         </div>
 
         <StudentFilter
           className="mt-4"
           title="학생 조회"
-          description="학년과 학과는 필수이며, 반은 필요할 때 여러 개 선택할 수 있습니다."
+          description="학과, 학년, 반을 순서대로 선택합니다. 반은 여러 개 선택할 수 있습니다."
           grade={gradeFilter}
           department={departmentFilter}
           selectedClasses={classFilters}
-          gradeOptions={gradeOptions}
+          gradeOptions={studentGradeOptions}
           departmentOptions={departmentOptions}
           classOptions={classOptions}
           onGradeChange={setGradeFilter}
           onDepartmentChange={setDepartmentFilter}
           onSelectedClassesChange={setClassFilters}
+          onFilterChange={clearSelection}
           disabled={isGenerating}
         />
 
@@ -1735,8 +1750,10 @@ export function BulkBehaviorCommentComposer() {
           </div>
         </div>
 
-        {!hasStudentLookupCriteria ? (
-          <div className="p-6 text-center text-sm font-semibold text-slate-500">학년과 학과를 선택하면 학생을 조회할 수 있습니다.</div>
+        {!hasStudentBaseCriteria ? (
+          <div className="p-6 text-center text-sm font-semibold text-slate-500">학과, 학년, 반을 선택하면 학생을 조회할 수 있습니다.</div>
+        ) : !hasStudentLookupCriteria ? (
+          <div className="p-6 text-center text-sm font-semibold text-slate-500">반을 선택하면 학생 목록이 표시됩니다.</div>
         ) : (
           <>
             {selectedStudents.length === 0 ? (

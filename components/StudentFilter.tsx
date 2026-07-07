@@ -18,6 +18,7 @@ type StudentFilterProps = {
   onGradeChange: (value: string) => void;
   onDepartmentChange: (value: string) => void;
   onSelectedClassesChange: (values: string[]) => void;
+  onFilterChange?: () => void;
   disabled?: boolean;
   title?: string;
   description?: string;
@@ -34,9 +35,10 @@ export function StudentFilter({
   onGradeChange,
   onDepartmentChange,
   onSelectedClassesChange,
+  onFilterChange,
   disabled = false,
   title = "학생 필터",
-  description = "학년, 학과, 반 순서로 조회 조건을 선택합니다.",
+  description = "학과, 학년, 반 순서로 조회 조건을 선택합니다.",
   className = ""
 }: StudentFilterProps) {
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
@@ -46,38 +48,40 @@ export function StudentFilter({
     () => departmentOptions.find((option) => option.value === department)?.label || department,
     [department, departmentOptions]
   );
-  const isDepartmentDisabled = disabled || !grade;
-  const isClassDisabled = disabled || !grade || !department;
+  const isGradeDisabled = disabled || !department;
+  const isClassDisabled = disabled || !department || !grade;
   const allClassesSelected = classOptions.length > 0 && classOptions.every((className) => selectedClassSet.has(className));
   const canReset = Boolean(grade || department || selectedClasses.length > 0);
 
   const criteriaLabel = useMemo(() => {
-    if (!grade) return "학년을 선택하세요.";
-    if (!department) return `${grade} · 학과를 선택하세요.`;
+    if (!department) return "학과를 선택하세요.";
+    if (!grade) return `${selectedDepartmentLabel} / 학년을 선택하세요.`;
+    if (selectedClasses.length === 0) return `${selectedDepartmentLabel} / ${grade} / 반을 선택하세요.`;
 
-    const classLabel = selectedClasses.length > 0 ? selectedClasses.join(", ") : "전체 반";
-    return `${grade} · ${selectedDepartmentLabel} · ${classLabel}`;
+    return `${selectedDepartmentLabel} / ${grade} / ${selectedClasses.join(", ")}`;
   }, [department, grade, selectedClasses, selectedDepartmentLabel]);
 
   useEffect(() => {
     if (isClassDisabled) setIsClassDropdownOpen(false);
   }, [isClassDisabled]);
 
-  const handleGradeChange = useCallback(
-    (value: string) => {
-      onGradeChange(value);
-      onDepartmentChange("");
-      onSelectedClassesChange([]);
-    },
-    [onDepartmentChange, onGradeChange, onSelectedClassesChange]
-  );
-
   const handleDepartmentChange = useCallback(
     (value: string) => {
       onDepartmentChange(value);
+      onGradeChange("");
       onSelectedClassesChange([]);
+      onFilterChange?.();
     },
-    [onDepartmentChange, onSelectedClassesChange]
+    [onDepartmentChange, onFilterChange, onGradeChange, onSelectedClassesChange]
+  );
+
+  const handleGradeChange = useCallback(
+    (value: string) => {
+      onGradeChange(value);
+      onSelectedClassesChange([]);
+      onFilterChange?.();
+    },
+    [onFilterChange, onGradeChange, onSelectedClassesChange]
   );
 
   const toggleClass = useCallback(
@@ -86,27 +90,32 @@ export function StudentFilter({
 
       if (selectedClassSet.has(className)) {
         onSelectedClassesChange(selectedClasses.filter((value) => value !== className));
+        onFilterChange?.();
         return;
       }
 
       onSelectedClassesChange([...selectedClasses, className]);
+      onFilterChange?.();
     },
-    [disabled, onSelectedClassesChange, selectedClassSet, selectedClasses]
+    [disabled, onFilterChange, onSelectedClassesChange, selectedClassSet, selectedClasses]
   );
 
   const selectAllClasses = useCallback(() => {
     onSelectedClassesChange([...classOptions]);
-  }, [classOptions, onSelectedClassesChange]);
+    onFilterChange?.();
+  }, [classOptions, onFilterChange, onSelectedClassesChange]);
 
   const clearClasses = useCallback(() => {
     onSelectedClassesChange([]);
-  }, [onSelectedClassesChange]);
+    onFilterChange?.();
+  }, [onFilterChange, onSelectedClassesChange]);
 
   const resetFilters = useCallback(() => {
-    onGradeChange("");
     onDepartmentChange("");
+    onGradeChange("");
     onSelectedClassesChange([]);
-  }, [onDepartmentChange, onGradeChange, onSelectedClassesChange]);
+    onFilterChange?.();
+  }, [onDepartmentChange, onFilterChange, onGradeChange, onSelectedClassesChange]);
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -127,24 +136,24 @@ export function StudentFilter({
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <label className="space-y-2">
-          <span className="field-label">학년</span>
-          <select className="input-base" value={grade} onChange={(event) => handleGradeChange(event.target.value)} disabled={disabled}>
-            <option value="">학년 선택</option>
-            {gradeOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
+          <span className="field-label">학과</span>
+          <select className="input-base" value={department} onChange={(event) => handleDepartmentChange(event.target.value)} disabled={disabled}>
+            <option value="">학과 선택</option>
+            {departmentOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
         </label>
 
         <label className="space-y-2">
-          <span className="field-label">학과</span>
-          <select className="input-base" value={department} onChange={(event) => handleDepartmentChange(event.target.value)} disabled={isDepartmentDisabled}>
-            <option value="">{grade ? "학과 선택" : "학년 먼저 선택"}</option>
-            {departmentOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+          <span className="field-label">학년</span>
+          <select className="input-base" value={grade} onChange={(event) => handleGradeChange(event.target.value)} disabled={isGradeDisabled}>
+            <option value="">{department ? "학년 선택" : "학과 먼저 선택"}</option>
+            {gradeOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
               </option>
             ))}
           </select>
@@ -161,7 +170,7 @@ export function StudentFilter({
             disabled={isClassDisabled}
           >
             <span className="truncate">
-              {isClassDisabled ? "학년과 학과 선택 후 반 선택" : selectedClasses.length > 0 ? `${selectedClasses.length}개 반 선택` : "전체 반"}
+              {isClassDisabled ? "학과와 학년 선택 후 반 선택" : selectedClasses.length > 0 ? `${selectedClasses.length}개 반 선택` : "반 선택"}
             </span>
             <ChevronDown className={`shrink-0 transition ${isClassDropdownOpen ? "rotate-180" : ""}`} size={16} aria-hidden="true" />
           </button>
