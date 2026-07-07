@@ -25,6 +25,7 @@ import { listStudentRecordDrafts, type StudentRecordDraft } from "@/lib/student-
 import { ensureUserProfile, listStudents } from "@/lib/students";
 import { gradeOptions } from "@/lib/options";
 import type { CommentMode, GenerateResponse, Student } from "@/lib/types";
+import { StudentFilter } from "@/components/StudentFilter";
 
 type ContentTab = "ai" | "edited" | "final";
 type DraftIndexEntry = {
@@ -131,7 +132,7 @@ export function StudentRecordCenter() {
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
-  const [classFilter, setClassFilter] = useState("");
+  const [classFilters, setClassFilters] = useState<string[]>([]);
   const [activeTabs, setActiveTabs] = useState<Record<string, ContentTab>>({});
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const [pendingRegenerations, setPendingRegenerations] = useState<Record<string, GenerateResponse | null>>({});
@@ -161,7 +162,7 @@ export function StudentRecordCenter() {
     setSelectedStudentId((current) => {
       if (preferredStudentId && studentResult.students.some((student) => student.id === preferredStudentId)) return preferredStudentId;
       if (current && studentResult.students.some((student) => student.id === current)) return current;
-      return studentResult.students[0]?.id || "";
+      return "";
     });
     setIsLoading(false);
   }
@@ -179,22 +180,39 @@ export function StudentRecordCenter() {
   const departmentOptions = settingsOptions.departmentOptions;
   const departmentLabelMap = useMemo(() => new Map(departmentOptions.map((option) => [option.value, option.label])), [departmentOptions]);
   const departmentLabel = useCallback((value: string) => departmentLabelMap.get(value) || value, [departmentLabelMap]);
+  const hasStudentLookupCriteria = Boolean(gradeFilter && departmentFilter);
 
   const classOptions = useMemo(() => {
-    const classes = students.map((student) => student.className).filter(Boolean);
+    if (!hasStudentLookupCriteria) return [];
+
+    const classes = students
+      .filter((student) => student.grade === gradeFilter)
+      .filter((student) => student.department === departmentFilter)
+      .map((student) => student.className)
+      .filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [students]);
+  }, [departmentFilter, gradeFilter, hasStudentLookupCriteria, students]);
+
+  useEffect(() => {
+    setClassFilters((current) => {
+      const validClassOptions = new Set(classOptions);
+      const next = current.filter((className) => validClassOptions.has(className));
+      return next.length === current.length ? current : next;
+    });
+  }, [classOptions]);
 
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
+    if (!hasStudentLookupCriteria) return [];
+
     return students
       .filter((student) => !normalizedQuery || student.name.toLowerCase().includes(normalizedQuery))
-      .filter((student) => !gradeFilter || student.grade === gradeFilter)
-      .filter((student) => !departmentFilter || student.department === departmentFilter)
-      .filter((student) => !classFilter || student.className === classFilter);
-  }, [classFilter, departmentFilter, gradeFilter, query, students]);
+      .filter((student) => student.grade === gradeFilter)
+      .filter((student) => student.department === departmentFilter)
+      .filter((student) => classFilters.length === 0 || classFilters.includes(student.className));
+  }, [classFilters, departmentFilter, gradeFilter, hasStudentLookupCriteria, query, students]);
 
   const draftIndex = useMemo(() => {
     const index = new Map<string, DraftIndexEntry>();
@@ -219,10 +237,20 @@ export function StudentRecordCenter() {
 
   const finalizedDraftCount = useMemo(() => drafts.filter((draft) => draft.status === "finalized").length, [drafts]);
 
-  const selectedStudent = useMemo(
-    () => students.find((student) => student.id === selectedStudentId) || filteredStudents[0] || students[0],
-    [filteredStudents, selectedStudentId, students]
-  );
+  const selectedStudent = useMemo(() => students.find((student) => student.id === selectedStudentId) || null, [selectedStudentId, students]);
+
+  useEffect(() => {
+    if (!selectedStudentId) return;
+
+    if (!hasStudentLookupCriteria) {
+      setSelectedStudentId("");
+      return;
+    }
+
+    if (!filteredStudents.some((student) => student.id === selectedStudentId)) {
+      setSelectedStudentId("");
+    }
+  }, [filteredStudents, hasStudentLookupCriteria, selectedStudentId]);
 
   const selectedDraftEntry = useMemo(() => (selectedStudent ? draftIndex.get(selectedStudent.id) : undefined), [draftIndex, selectedStudent]);
   const selectedSubjectDrafts = selectedDraftEntry?.subjectDrafts || [];
@@ -441,37 +469,20 @@ export function StudentRecordCenter() {
                 <span className="field-label">이름 검색</span>
                 <input className="input-base" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="학생 이름" />
               </label>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                <label className="space-y-2">
-                  <span className="field-label">학년</span>
-                  <select className="input-base" value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
-                    <option value="">전체</option>
-                    {gradeOptions.map((option) => (
-                      <option key={option}>{option}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-2">
-                  <span className="field-label">학과</span>
-                  <select className="input-base" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
-                    <option value="">전체</option>
-                    {departmentOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-2">
-                  <span className="field-label">반</span>
-                  <select className="input-base" value={classFilter} onChange={(event) => setClassFilter(event.target.value)}>
-                    <option value="">전체</option>
-                    {classOptions.map((option) => (
-                      <option key={option}>{option}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+              <StudentFilter
+                title="학생 조회"
+                description="학년과 학과를 선택한 뒤 학생을 선택합니다."
+                grade={gradeFilter}
+                department={departmentFilter}
+                selectedClasses={classFilters}
+                gradeOptions={gradeOptions}
+                departmentOptions={departmentOptions}
+                classOptions={classOptions}
+                onGradeChange={setGradeFilter}
+                onDepartmentChange={setDepartmentFilter}
+                onSelectedClassesChange={setClassFilters}
+                disabled={isLoading}
+              />
             </div>
           </div>
 
@@ -482,7 +493,12 @@ export function StudentRecordCenter() {
                 학생부 데이터 로딩 중
               </div>
             ) : null}
-            {!isLoading && filteredStudents.length === 0 ? <div className="p-6 text-center text-sm font-semibold text-slate-500">조건에 맞는 학생이 없습니다.</div> : null}
+            {!isLoading && !hasStudentLookupCriteria ? (
+              <div className="p-6 text-center text-sm font-semibold text-slate-500">학년과 학과를 선택하면 학생을 조회할 수 있습니다.</div>
+            ) : null}
+            {!isLoading && hasStudentLookupCriteria && filteredStudents.length === 0 ? (
+              <div className="p-6 text-center text-sm font-semibold text-slate-500">조건에 맞는 학생이 없습니다.</div>
+            ) : null}
             {filteredStudents.map((student) => {
               const selected = selectedStudent?.id === student.id;
               const studentDraftEntry = draftIndex.get(student.id);
@@ -504,7 +520,7 @@ export function StudentRecordCenter() {
 
         <section className="min-w-0 space-y-5">
           {!selectedStudent ? (
-            <div className="panel p-8 text-center text-sm font-semibold text-slate-500">학생을 선택하면 상세 학생부가 표시됩니다.</div>
+            <div className="panel p-8 text-center text-sm font-semibold text-slate-500">학생을 선택하면 학생부 상세가 표시됩니다.</div>
           ) : (
             <>
               <div className="panel p-5">

@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw, Search, Sparkles, UsersRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw, Sparkles, UsersRound } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
 import { downloadSubjectCommentResults, type SubjectCommentResultExportRow } from "@/lib/export-results";
@@ -21,6 +21,7 @@ import { BulkDraftLifecycleEditor } from "@/components/BulkDraftLifecycleEditor"
 import { SubjectSelect } from "@/components/SubjectSelect";
 import { SubjectLearningModuleControls } from "@/components/SubjectLearningModuleControls";
 import { useSubjectLearningModule } from "@/components/useSubjectLearningModule";
+import { StudentFilter } from "@/components/StudentFilter";
 
 type BulkStatus = "waiting" | "queued" | "generating" | "completed" | "failed";
 
@@ -552,16 +553,19 @@ export function BulkSubjectCommentComposer() {
   const selectedStudentIdSet = useMemo(() => new Set(selectedStudentIds), [selectedStudentIds]);
   const qualitySelectedStudentIdSet = useMemo(() => new Set(qualitySelectedStudentIds), [qualitySelectedStudentIds]);
   const hasSubjectName = subjectName.trim().length > 0;
+  const hasStudentLookupCriteria = Boolean(gradeFilter && departmentFilter);
 
   const classOptions = useMemo(() => {
+    if (!hasStudentLookupCriteria) return [];
+
     const classes = students
-      .filter((student) => !gradeFilter || student.grade === gradeFilter)
-      .filter((student) => !departmentFilter || student.department === departmentFilter)
+      .filter((student) => student.grade === gradeFilter)
+      .filter((student) => student.department === departmentFilter)
       .map((student) => student.className)
       .filter(Boolean);
 
     return sortClassNames(Array.from(new Set(classes)));
-  }, [departmentFilter, gradeFilter, students]);
+  }, [departmentFilter, gradeFilter, hasStudentLookupCriteria, students]);
 
   useEffect(() => {
     setClassFilters((current) => {
@@ -572,12 +576,15 @@ export function BulkSubjectCommentComposer() {
   }, [classOptions]);
 
   const filteredStudents = useMemo(
-    () =>
-      students
-        .filter((student) => !gradeFilter || student.grade === gradeFilter)
-        .filter((student) => !departmentFilter || student.department === departmentFilter)
-        .filter((student) => classFilters.length === 0 || classFilters.includes(student.className)),
-    [classFilters, departmentFilter, gradeFilter, students]
+    () => {
+      if (!hasStudentLookupCriteria) return [];
+
+      return students
+        .filter((student) => student.grade === gradeFilter)
+        .filter((student) => student.department === departmentFilter)
+        .filter((student) => classFilters.length === 0 || classFilters.includes(student.className));
+    },
+    [classFilters, departmentFilter, gradeFilter, hasStudentLookupCriteria, students]
   );
 
   const selectedStudents = useMemo(() => students.filter((student) => selectedStudentIdSet.has(student.id)), [selectedStudentIdSet, students]);
@@ -640,8 +647,7 @@ export function BulkSubjectCommentComposer() {
     [filteredStudents, selectedStudentIdSet]
   );
   const selectedCountOverLimit = selectedStudents.length > maxSelectableStudents;
-  const canGenerate = hasSubjectName && readySelectedCount > 0 && !isGenerating && !selectedCountOverLimit;
-  const allClassesSelected = classOptions.length > 0 && classOptions.every((className) => classFilters.includes(className));
+  const canGenerate = hasStudentLookupCriteria && hasSubjectName && readySelectedCount > 0 && !isGenerating && !selectedCountOverLimit;
   const subjectResultExportRows = useMemo<SubjectCommentResultExportRow[]>(
     () =>
       selectedStudents.flatMap((student) => {
@@ -714,18 +720,6 @@ export function BulkSubjectCommentComposer() {
         }
       };
     });
-  }, []);
-
-  const toggleClassFilter = useCallback((className: string) => {
-    setClassFilters((current) => (current.includes(className) ? current.filter((value) => value !== className) : [...current, className]));
-  }, []);
-
-  const selectAllClasses = useCallback(() => {
-    setClassFilters(classOptions);
-  }, [classOptions]);
-
-  const clearClassFilters = useCallback(() => {
-    setClassFilters([]);
   }, []);
 
   const toggleStudent = useCallback(
@@ -1685,15 +1679,12 @@ export function BulkSubjectCommentComposer() {
       <section className="panel p-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <Search size={18} className="text-blue-700" aria-hidden="true" />
-              <h2 className="text-lg font-bold text-slate-950">학생 필터</h2>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">필터 결과는 아래 입력 테이블에 바로 표시됩니다.</p>
+            <h2 className="text-lg font-bold text-slate-950">학생 조회</h2>
+            <p className="mt-1 text-sm text-slate-500">학년과 학과를 선택하면 학생 입력 테이블이 표시됩니다.</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button className="secondary-button" type="button" onClick={toggleFilteredStudents} disabled={filteredStudents.length === 0 || isGenerating}>
+            <button className="secondary-button" type="button" onClick={toggleFilteredStudents} disabled={!hasStudentLookupCriteria || filteredStudents.length === 0 || isGenerating}>
               <UsersRound size={17} aria-hidden="true" />
               {allFilteredSelected ? "필터 학생 선택 해제" : "필터 학생 전체 선택"}
             </button>
@@ -1703,65 +1694,21 @@ export function BulkSubjectCommentComposer() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <label className="space-y-2">
-            <span className="field-label">학년</span>
-            <select className="input-base" value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} disabled={isGenerating}>
-              <option value="">전체</option>
-              {gradeOptions.map((option) => (
-                <option key={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="space-y-2">
-            <span className="field-label">학과</span>
-            <select className="input-base" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} disabled={isGenerating}>
-              <option value="">전체</option>
-              {departmentOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <fieldset className="space-y-2 md:col-span-2">
-            <legend className="field-label">반 다중 선택</legend>
-            <div className="flex flex-wrap gap-2">
-              <button className="secondary-button min-h-9 px-3 py-1.5 text-xs" type="button" onClick={selectAllClasses} disabled={classOptions.length === 0 || isGenerating || allClassesSelected}>
-                전체 반 선택
-              </button>
-              <button className="secondary-button min-h-9 px-3 py-1.5 text-xs" type="button" onClick={clearClassFilters} disabled={classFilters.length === 0 || isGenerating}>
-                선택 초기화
-              </button>
-            </div>
-            {classOptions.length === 0 ? (
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-500">선택 가능한 반이 없습니다.</div>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {classOptions.map((className) => {
-                  const selected = classFilters.includes(className);
-                  return (
-                    <button
-                      key={className}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => toggleClassFilter(className)}
-                      disabled={isGenerating}
-                      className={`min-h-8 rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
-                        selected ? "border-blue-600 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-600 hover:border-blue-200"
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
-                    >
-                      {className}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <p className="field-help">반을 선택하지 않으면 학년과 학과 조건에 맞는 모든 반 학생을 표시합니다.</p>
-          </fieldset>
-        </div>
+        <StudentFilter
+          className="mt-4"
+          title="조회 조건"
+          description="학년과 학과는 필수이며, 반은 필요할 때 여러 개 선택할 수 있습니다."
+          grade={gradeFilter}
+          department={departmentFilter}
+          selectedClasses={classFilters}
+          gradeOptions={gradeOptions}
+          departmentOptions={departmentOptions}
+          classOptions={classOptions}
+          onGradeChange={setGradeFilter}
+          onDepartmentChange={setDepartmentFilter}
+          onSelectedClassesChange={setClassFilters}
+          disabled={isGenerating}
+        />
       </section>
 
       <section className="panel min-w-0 overflow-hidden">
@@ -1777,77 +1724,83 @@ export function BulkSubjectCommentComposer() {
               {isGenerating ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <Sparkles size={18} aria-hidden="true" />}
               선택 학생 생성
             </button>
-            <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={failedStudents.length === 0 || isGenerating || !hasSubjectName}>
+            <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={!hasStudentLookupCriteria || failedStudents.length === 0 || isGenerating || !hasSubjectName}>
               <RefreshCcw size={17} aria-hidden="true" />
               실패만 재생성
             </button>
           </div>
         </div>
 
-        {!hasSubjectName || selectedStudents.length === 0 ? (
-          <div className="border-b border-slate-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-900">
-            {!hasSubjectName ? "과목명을 입력하세요. " : ""}
-            {selectedStudents.length === 0 ? "생성할 학생을 선택하세요." : ""}
-          </div>
-        ) : null}
+        {!hasStudentLookupCriteria ? (
+          <div className="p-6 text-center text-sm font-semibold text-slate-500">학년과 학과를 선택하면 학생을 조회할 수 있습니다.</div>
+        ) : (
+          <>
+            {!hasSubjectName || selectedStudents.length === 0 ? (
+              <div className="border-b border-slate-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-900">
+                {!hasSubjectName ? "과목명을 입력하세요. " : ""}
+                {selectedStudents.length === 0 ? "생성할 학생을 선택하세요." : ""}
+              </div>
+            ) : null}
 
-        <div className={`border-b border-slate-200 px-5 py-3 text-sm font-semibold ${selectedCountOverLimit ? "bg-rose-50 text-rose-800" : "bg-blue-50 text-blue-800"}`}>
-          {selectionLimitMessage}
-        </div>
+            <div className={`border-b border-slate-200 px-5 py-3 text-sm font-semibold ${selectedCountOverLimit ? "bg-rose-50 text-rose-800" : "bg-blue-50 text-blue-800"}`}>
+              {selectionLimitMessage}
+            </div>
 
-        {message ? <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700">{message}</div> : null}
+            {message ? <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700">{message}</div> : null}
 
-        <div className="max-h-[72vh] w-full overflow-x-auto overflow-y-auto overscroll-x-contain">
-          <table className="w-full min-w-[1180px] divide-y divide-slate-200 text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs font-bold uppercase tracking-normal text-slate-500 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
-              <tr>
-                <th className="w-14 px-3 py-3">선택</th>
-                <th className="w-40 px-3 py-3">학생명</th>
-                <th className="w-44 px-3 py-3">활동유형</th>
-                <th className="w-44 px-3 py-3">역량키워드</th>
-                <th className="w-36 px-3 py-3">보완점</th>
-                <th className="w-[260px] px-3 py-3">교사 관찰 메모</th>
-                <th className="w-24 px-3 py-3">상태</th>
-                <th className="w-28 px-3 py-3">작업</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
-                    <Loader2 className="mr-2 inline animate-spin" size={17} aria-hidden="true" />
-                    학생 목록 로딩 중
-                  </td>
-                </tr>
-              ) : null}
-              {!isLoading && filteredStudents.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
-                    조건에 맞는 학생이 없습니다.
-                  </td>
-                </tr>
-              ) : null}
-              {filteredStudents.map((student) => (
-                <BulkSubjectStudentRow
-                  key={student.id}
-                  student={student}
-                  input={studentInputs[student.id] || emptyStudentSubjectInput}
-                  departmentName={departmentLabel(student.department)}
-                  selected={selectedStudentIdSet.has(student.id)}
-                  isGenerating={isGenerating}
-                  hasSubjectName={hasSubjectName}
-                  activityOptions={activityOptions}
-                  competencyOptions={competencyOptions}
-                  improvementOptions={subjectImprovementOptions}
-                  onToggleStudent={toggleStudent}
-                  onPatchInput={patchStudentInput}
-                  onCopyPrevious={handleCopyPreviousStudentValues}
-                  onGenerate={handleGenerateSingleStudent}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+            <div className="max-h-[72vh] w-full overflow-x-auto overflow-y-auto overscroll-x-contain">
+              <table className="w-full min-w-[1180px] divide-y divide-slate-200 text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs font-bold uppercase tracking-normal text-slate-500 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
+                  <tr>
+                    <th className="w-14 px-3 py-3">선택</th>
+                    <th className="w-40 px-3 py-3">학생명</th>
+                    <th className="w-44 px-3 py-3">활동유형</th>
+                    <th className="w-44 px-3 py-3">역량키워드</th>
+                    <th className="w-36 px-3 py-3">보완점</th>
+                    <th className="w-[260px] px-3 py-3">교사 관찰 메모</th>
+                    <th className="w-24 px-3 py-3">상태</th>
+                    <th className="w-28 px-3 py-3">작업</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                        <Loader2 className="mr-2 inline animate-spin" size={17} aria-hidden="true" />
+                        학생 목록 로딩 중
+                      </td>
+                    </tr>
+                  ) : null}
+                  {!isLoading && filteredStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                        조건에 맞는 학생이 없습니다.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {filteredStudents.map((student) => (
+                    <BulkSubjectStudentRow
+                      key={student.id}
+                      student={student}
+                      input={studentInputs[student.id] || emptyStudentSubjectInput}
+                      departmentName={departmentLabel(student.department)}
+                      selected={selectedStudentIdSet.has(student.id)}
+                      isGenerating={isGenerating}
+                      hasSubjectName={hasSubjectName}
+                      activityOptions={activityOptions}
+                      competencyOptions={competencyOptions}
+                      improvementOptions={subjectImprovementOptions}
+                      onToggleStudent={toggleStudent}
+                      onPatchInput={patchStudentInput}
+                      onCopyPrevious={handleCopyPreviousStudentValues}
+                      onGenerate={handleGenerateSingleStudent}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="panel overflow-hidden">

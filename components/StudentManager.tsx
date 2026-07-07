@@ -7,6 +7,7 @@ import { gradeOptions } from "@/lib/options";
 import { downloadStudentUploadTemplate } from "@/lib/student-template";
 import { createStudent, createStudents, deleteStudent, listStudents, updateStudent, type StudentInput } from "@/lib/students";
 import type { Department, Student } from "@/lib/types";
+import { StudentFilter } from "@/components/StudentFilter";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
@@ -143,8 +144,8 @@ export function StudentManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<Student["grade"] | "">("");
-  const [classFilter, setClassFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
+  const [classFilters, setClassFilters] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingExcel, setIsUploadingExcel] = useState(false);
@@ -174,34 +175,42 @@ export function StudentManager() {
   }
 
   const classOptions = useMemo(() => {
-    const classes = students.map((student) => student.className).filter(Boolean);
-    if (classFilter) classes.push(classFilter);
+    if (!gradeFilter || !departmentFilter) return [];
 
+    const classes = students
+      .filter((student) => student.grade === gradeFilter)
+      .filter((student) => student.department === departmentFilter)
+      .map((student) => student.className)
+      .filter(Boolean);
     return sortClassNames(Array.from(new Set(classes)));
-  }, [classFilter, students]);
+  }, [departmentFilter, gradeFilter, students]);
 
-  const hasStudentListFilters = Boolean(gradeFilter && classFilter);
+  useEffect(() => {
+    setClassFilters((current) => {
+      const validClassOptions = new Set(classOptions);
+      const next = current.filter((className) => validClassOptions.has(className));
+      return next.length === current.length ? current : next;
+    });
+  }, [classOptions]);
 
-  const gradeClassStudents = useMemo(() => {
-    if (!gradeFilter || !classFilter) return [];
+  const hasStudentListFilters = Boolean(gradeFilter && departmentFilter);
 
-    return students.filter((student) => student.grade === gradeFilter && student.className === classFilter);
-  }, [classFilter, gradeFilter, students]);
+  const gradeDepartmentStudents = useMemo(() => {
+    if (!hasStudentListFilters) return [];
+
+    return students
+      .filter((student) => student.grade === gradeFilter)
+      .filter((student) => student.department === departmentFilter)
+      .filter((student) => classFilters.length === 0 || classFilters.includes(student.className));
+  }, [classFilters, departmentFilter, gradeFilter, hasStudentListFilters, students]);
 
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return gradeClassStudents
-      .filter((student) => !departmentFilter || student.department === departmentFilter)
-      .filter((student) => !normalizedQuery || student.name.toLowerCase().includes(normalizedQuery));
-  }, [departmentFilter, gradeClassStudents, query]);
+    return gradeDepartmentStudents.filter((student) => !normalizedQuery || student.name.toLowerCase().includes(normalizedQuery));
+  }, [gradeDepartmentStudents, query]);
 
   const visibleStudentCount = hasStudentListFilters ? filteredStudents.length : 0;
-
-  function updateGradeFilter(value: Student["grade"] | "") {
-    setGradeFilter(value);
-    setClassFilter("");
-  }
 
   async function loadStudents() {
     setIsLoading(true);
@@ -494,51 +503,37 @@ export function StudentManager() {
             <Search size={17} className="text-blue-700" aria-hidden="true" />
             <h3 className="text-sm font-bold text-slate-900">목록 필터</h3>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="mt-4 space-y-4">
             <label className="space-y-2">
               <span className="field-label">검색</span>
               <input className="input-base" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="학생 이름" />
             </label>
-            <label className="space-y-2">
-              <span className="field-label">학년</span>
-              <select className="input-base" value={gradeFilter} onChange={(event) => updateGradeFilter(event.target.value as Student["grade"] | "")}>
-                <option value="">학년 선택</option>
-                {gradeOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-2">
-              <span className="field-label">반</span>
-              <select className="input-base" value={classFilter} onChange={(event) => setClassFilter(event.target.value)} disabled={!gradeFilter}>
-                <option value="">{gradeFilter ? "반 선택" : "학년 먼저 선택"}</option>
-                {classOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-2">
-              <span className="field-label">학과(선택)</span>
-              <select className="input-base" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
-                <option value="">전체</option>
-                {departmentOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+
+            <StudentFilter
+              title="학생 조회"
+              description="학년과 학과를 선택하면 목록이 표시되고, 반은 여러 개 선택할 수 있습니다."
+              grade={gradeFilter}
+              department={departmentFilter}
+              selectedClasses={classFilters}
+              gradeOptions={gradeOptions}
+              departmentOptions={departmentOptions}
+              classOptions={classOptions}
+              onGradeChange={(value) => setGradeFilter(value as Student["grade"] | "")}
+              onDepartmentChange={setDepartmentFilter}
+              onSelectedClassesChange={setClassFilters}
+              disabled={isSaving || isUploadingExcel}
+            />
           </div>
         </div>
 
         {isLoading ? (
           <div className="p-5 text-sm text-slate-500">학생 목록을 불러오는 중입니다.</div>
         ) : !hasStudentListFilters ? (
-          <div className="p-5 text-sm leading-6 text-slate-500">학년과 반을 선택하면 학생 목록이 표시됩니다.</div>
-        ) : gradeClassStudents.length === 0 ? (
-          <div className="p-5 text-sm leading-6 text-slate-500">선택한 학년/반의 학생이 없습니다.</div>
+          <div className="p-5 text-sm leading-6 text-slate-500">학년과 학과를 선택하면 학생을 조회할 수 있습니다.</div>
+        ) : gradeDepartmentStudents.length === 0 ? (
+          <div className="p-5 text-sm leading-6 text-slate-500">선택한 학년/학과/반 조건에 맞는 학생이 없습니다.</div>
         ) : filteredStudents.length === 0 ? (
-          <div className="p-5 text-sm leading-6 text-slate-500">검색 또는 학과 조건에 맞는 학생이 없습니다.</div>
+          <div className="p-5 text-sm leading-6 text-slate-500">검색 조건에 맞는 학생이 없습니다.</div>
         ) : (
           <div className="divide-y divide-slate-100">
             {filteredStudents.map((student) => (
