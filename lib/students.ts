@@ -349,6 +349,50 @@ export async function deleteStudent(id: string): Promise<{ error?: string }> {
   const profileResult = await ensureUserProfile();
   if (!profileResult.profile) return { error: profileResult.error };
 
+  const { data: studentData, error: selectError } = await supabase
+    .from("students")
+    .select(studentColumns)
+    .eq("id", id)
+    .eq("school_id", profileResult.profile.school_id)
+    .maybeSingle();
+
+  if (selectError) {
+    const formattedError = formatSupabaseError("삭제 대상 학생 조회", selectError);
+    logSupabaseError("deleteStudent.selectStudent", selectError, { id, schoolId: profileResult.profile.school_id });
+    return { error: formattedError };
+  }
+
+  if (!studentData) {
+    return { error: "학생 삭제 실패: 삭제할 학생을 찾지 못했습니다." };
+  }
+
+  const student = studentData as StudentRow;
+  const archivedAt = new Date().toISOString();
+  const { error: archiveError } = await supabase
+    .from("record_drafts")
+    .update({
+      is_current: false,
+      deleted_student_id: student.id,
+      deleted_student_name: student.name,
+      deleted_student_grade: student.grade,
+      deleted_student_department: student.department,
+      deleted_student_class: student.class_name,
+      deleted_student_number: student.number,
+      archived_at: archivedAt,
+      archive_reason: "student_deleted"
+    })
+    .eq("student_id", id)
+    .eq("school_id", profileResult.profile.school_id);
+
+  if (archiveError) {
+    const formattedError = formatSupabaseError("학생부 기록 archive", archiveError);
+    logSupabaseError("deleteStudent.archiveRecordDrafts", archiveError, {
+      id,
+      schoolId: profileResult.profile.school_id
+    });
+    return { error: formattedError };
+  }
+
   const { error } = await supabase.from("students").delete().eq("id", id).eq("school_id", profileResult.profile.school_id);
   if (error) {
     const formattedError = formatSupabaseError("학생 삭제", error);
