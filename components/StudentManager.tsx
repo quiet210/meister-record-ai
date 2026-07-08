@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileSpreadsheet, Loader2, Pencil, Plus, RefreshCw, Search, Trash2, Upload, UsersRound, X } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type DepartmentOption } from "@/lib/admin-settings";
 import { gradeOptions } from "@/lib/options";
 import { downloadStudentUploadTemplate } from "@/lib/student-template";
-import { createStudent, createStudents, deleteStudent, listStudents, updateStudent, type StudentInput } from "@/lib/students";
+import { createStudent, createStudents, deleteStudents, listStudents, updateStudent, type StudentInput } from "@/lib/students";
 import type { Department, Student } from "@/lib/types";
 import { StudentFilter } from "@/components/StudentFilter";
 
@@ -15,6 +15,7 @@ function getErrorMessage(error: unknown) {
 
 const fallbackSettings = getFallbackSettingsOptions();
 const fallbackDepartment = fallbackSettings.departmentOptions[0]?.value || "materials";
+const studentDeleteNotice = "학생을 삭제하면 해당 학생과 연결된 학생부 초안/최종본 조회가 어려워질 수 있습니다.";
 
 const excelColumnAliases = {
   name: ["name", "studentname", "student", "이름", "학생명", "성명"],
@@ -146,12 +147,14 @@ export function StudentManager() {
   const [gradeFilter, setGradeFilter] = useState<Student["grade"] | "">("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [classFilters, setClassFilters] = useState<string[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingExcel, setIsUploadingExcel] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const excelInputRef = useRef<HTMLInputElement | null>(null);
+  const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -219,6 +222,47 @@ export function StudentManager() {
   }, [gradeDepartmentStudents, query]);
 
   const visibleStudentCount = hasStudentListFilters ? filteredStudents.length : 0;
+  const selectedStudentIdSet = useMemo(() => new Set(selectedStudentIds), [selectedStudentIds]);
+  const selectedVisibleStudents = useMemo(
+    () => filteredStudents.filter((student) => selectedStudentIdSet.has(student.id)),
+    [filteredStudents, selectedStudentIdSet]
+  );
+  const allVisibleStudentsSelected = filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id));
+  const hasPartialVisibleSelection = selectedVisibleStudents.length > 0 && !allVisibleStudentsSelected;
+
+  useEffect(() => {
+    setSelectedStudentIds((current) => {
+      const visibleIds = new Set(filteredStudents.map((student) => student.id));
+      const next = current.filter((studentId) => visibleIds.has(studentId));
+      return next.length === current.length ? current : next;
+    });
+  }, [filteredStudents]);
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate = hasPartialVisibleSelection;
+    }
+  }, [hasPartialVisibleSelection]);
+
+  const toggleStudentSelection = useCallback((studentId: string) => {
+    setSelectedStudentIds((current) =>
+      current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]
+    );
+  }, []);
+
+  const toggleVisibleStudentSelection = useCallback(() => {
+    const visibleIds = filteredStudents.map((student) => student.id);
+    if (visibleIds.length === 0) return;
+
+    setSelectedStudentIds((current) => {
+      if (allVisibleStudentsSelected) {
+        const visibleIdSet = new Set(visibleIds);
+        return current.filter((id) => !visibleIdSet.has(id));
+      }
+
+      return Array.from(new Set([...current, ...visibleIds]));
+    });
+  }, [allVisibleStudentsSelected, filteredStudents]);
 
   async function loadStudents() {
     setIsLoading(true);
@@ -343,25 +387,35 @@ export function StudentManager() {
     }
   }
 
-  async function removeStudent(student: Student) {
+  async function deleteStudentsByIds(studentIds: string[], successLabel: string) {
+    const uniqueStudentIds = Array.from(new Set(studentIds));
+    if (uniqueStudentIds.length === 0) return;
+
     setIsSaving(true);
     setMessage("");
     setError("");
 
     try {
-      const result = await deleteStudent(student.id);
-      if (result.error) {
-        console.error("[StudentManager] failed to delete student", result.error);
-        setError(result.error);
-        return;
+      const result = await deleteStudents(uniqueStudentIds);
+      const refreshError = await loadStudents();
+
+      setSelectedStudentIds([]);
+      if (editingId && uniqueStudentIds.includes(editingId)) {
+        setForm(makeEmptyForm(departmentOptions[0]?.value));
+        setEditingId(null);
+      }
+      window.dispatchEvent(new Event("student-record-ai:students-changed"));
+
+      if (result.errors.length > 0) {
+        console.error("[StudentManager] failed to delete some students", result.errors);
+        setError(`일부 학생 삭제에 실패했습니다. ${result.errors.slice(0, 3).join(" ")}`);
+      } else if (refreshError) {
+        setError(`학생 삭제는 완료됐지만 목록을 다시 불러오지 못했습니다. ${refreshError}`);
       }
 
-      setStudents((current) => current.filter((item) => item.id !== student.id));
-      window.dispatchEvent(new Event("student-record-ai:students-changed"));
-      if (editingId === student.id) {
-        resetForm();
+      if (result.deletedCount > 0) {
+        setMessage(`${successLabel} ${result.deletedCount}명을 삭제했습니다.`);
       }
-      setMessage(`${student.name} 학생을 삭제했습니다.`);
     } catch (deleteError) {
       const errorMessage = getErrorMessage(deleteError);
       console.error("[StudentManager] failed to delete student", deleteError);
@@ -369,6 +423,38 @@ export function StudentManager() {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function removeStudent(student: Student) {
+    const confirmed = window.confirm(`${student.name} 학생을 삭제합니다. 이 작업은 되돌릴 수 없습니다.\n\n${studentDeleteNotice}`);
+    if (!confirmed) return;
+
+    await deleteStudentsByIds([student.id], `${student.name} 학생`);
+  }
+
+  async function removeSelectedStudents() {
+    const targetStudents = selectedVisibleStudents;
+    if (targetStudents.length === 0) return;
+
+    const confirmed = window.confirm(`선택한 학생 ${targetStudents.length}명을 삭제합니다. 이 작업은 되돌릴 수 없습니다.\n\n${studentDeleteNotice}`);
+    if (!confirmed) return;
+
+    await deleteStudentsByIds(
+      targetStudents.map((student) => student.id),
+      "선택 학생"
+    );
+  }
+
+  async function removeFilteredStudents() {
+    if (!hasStudentListFilters || filteredStudents.length === 0) return;
+
+    const confirmed = window.confirm(`현재 조회된 학생 ${filteredStudents.length}명을 삭제합니다. 이 작업은 되돌릴 수 없습니다.\n\n${studentDeleteNotice}`);
+    if (!confirmed) return;
+
+    await deleteStudentsByIds(
+      filteredStudents.map((student) => student.id),
+      "현재 조회 학생"
+    );
   }
 
   return (
@@ -501,7 +587,7 @@ export function StudentManager() {
             <h2 className="text-sm font-bold text-slate-900">학생 목록</h2>
           </div>
           <div className="grid grid-cols-2 gap-3 text-xs font-semibold text-slate-500 sm:text-right">
-            <span>선택된 학생 수 {visibleStudentCount}명</span>
+            <span>조회 학생 수 {visibleStudentCount}명</span>
             <span>총 학생 수 {students.length}명</span>
           </div>
         </div>
@@ -534,6 +620,34 @@ export function StudentManager() {
           </div>
         </div>
 
+        <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <p className="text-xs leading-5 text-slate-600">
+              현재 조회된 학생만 삭제 대상입니다. {studentDeleteNotice}
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white sm:w-auto"
+                type="button"
+                onClick={removeSelectedStudents}
+                disabled={selectedVisibleStudents.length === 0 || isSaving || isUploadingExcel}
+              >
+                <Trash2 size={17} aria-hidden="true" />
+                선택 학생 삭제 ({selectedVisibleStudents.length}명)
+              </button>
+              <button
+                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+                type="button"
+                onClick={removeFilteredStudents}
+                disabled={!hasStudentListFilters || filteredStudents.length === 0 || isSaving || isUploadingExcel}
+              >
+                <Trash2 size={17} aria-hidden="true" />
+                현재 조회 학생 전체 삭제 ({visibleStudentCount}명)
+              </button>
+            </div>
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="p-5 text-sm text-slate-500">학생 목록을 불러오는 중입니다.</div>
         ) : !hasStudentBaseFilters ? (
@@ -546,8 +660,33 @@ export function StudentManager() {
           <div className="p-5 text-sm leading-6 text-slate-500">검색 조건에 맞는 학생이 없습니다.</div>
         ) : (
           <div className="divide-y divide-slate-100">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500">
+              <label className="flex h-9 w-9 items-center justify-center">
+                <input
+                  ref={selectAllCheckboxRef}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  type="checkbox"
+                  checked={allVisibleStudentsSelected}
+                  onChange={toggleVisibleStudentSelection}
+                  disabled={filteredStudents.length === 0 || isSaving || isUploadingExcel}
+                />
+                <span className="sr-only">현재 조회 학생 전체 선택</span>
+              </label>
+              <span>학생</span>
+              <span className="text-right">작업</span>
+            </div>
             {filteredStudents.map((student) => (
-              <div key={student.id} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3">
+              <div key={student.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
+                <label className="flex h-10 w-9 items-center justify-center">
+                  <input
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    type="checkbox"
+                    checked={selectedStudentIdSet.has(student.id)}
+                    onChange={() => toggleStudentSelection(student.id)}
+                    disabled={isSaving || isUploadingExcel}
+                  />
+                  <span className="sr-only">{student.name} 선택</span>
+                </label>
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-950">{student.name}</p>
                   <p className="mt-1 text-sm text-slate-500">
