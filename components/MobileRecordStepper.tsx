@@ -5,15 +5,15 @@ import { ChevronLeft, ChevronRight, Loader2, RotateCcw, Sparkles } from "lucide-
 import {
   behaviorImprovementOptions,
   commentLengthOptions,
-  gradeOptions,
   improvementOptions
 } from "@/lib/options";
-import type { CommentLength, Department } from "@/lib/types";
+import type { CommentLength } from "@/lib/types";
 import type { RecordComposerViewProps } from "@/components/RecordComposer";
 import { GeneratedResultCard } from "@/components/GeneratedResultCard";
 import { SelectableChipGroup } from "@/components/SelectableChipGroup";
 import { SubjectSelect } from "@/components/SubjectSelect";
 import { SubjectLearningModuleControls } from "@/components/SubjectLearningModuleControls";
+import { StudentFilter } from "@/components/StudentFilter";
 
 const steps = ["기본정보", "활동/생활 영역 선택", "교사 메모", "결과"] as const;
 
@@ -29,7 +29,7 @@ export function MobileRecordStepper(props: RecordComposerViewProps) {
 
   const canGoNext = useMemo(() => {
     if (currentStep === 0) {
-      return mode === "subject" ? props.subjectName.trim().length > 0 : props.className.trim().length > 0;
+      return Boolean(props.selectedStudent) && (mode === "subject" ? props.subjectName.trim().length > 0 : true);
     }
 
     if (currentStep === 1) {
@@ -159,42 +159,64 @@ export function MobileRecordStepper(props: RecordComposerViewProps) {
 
 function BasicInfoStep(props: RecordComposerViewProps) {
   const { mode } = props;
+  const selectedDepartmentLabel = props.selectedStudent
+    ? props.settingsOptions.departmentOptions.find((option) => option.value === props.selectedStudent?.department)?.label || props.selectedStudent.department
+    : "";
 
   return (
     <section className="panel space-y-4 p-4">
-      <label className="space-y-2">
-        <span className="field-label">학생</span>
-        <select className="input-base" value={props.selectedStudentId} onChange={(event) => props.handleStudentChange(event.target.value)}>
-          {props.students.length === 0 ? <option value="">학생을 먼저 등록하세요</option> : null}
-          {props.students.map((student) => (
-            <option key={student.id} value={student.id}>
-              {student.className} {student.number}번 {student.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <StudentFilter
+        title="학생 조회"
+        description="학과, 학년, 반을 순서대로 선택합니다. 반은 여러 개 선택할 수 있습니다."
+        grade={props.grade}
+        department={props.department}
+        selectedClasses={props.selectedClasses}
+        gradeOptions={props.studentGradeOptions}
+        departmentOptions={props.settingsOptions.departmentOptions}
+        classOptions={props.studentClassOptions}
+        onGradeChange={props.setGrade}
+        onDepartmentChange={props.setDepartment}
+        onSelectedClassesChange={props.setSelectedClasses}
+        onFilterChange={props.clearSelectedStudent}
+        disabled={props.isLoading}
+      />
 
-      <label className="space-y-2">
-        <span className="field-label">학년</span>
-        <select className="input-base" value={props.grade} onChange={(event) => props.setGrade(event.target.value as (typeof gradeOptions)[number])}>
-          {gradeOptions.map((option) => (
-            <option key={option}>{option}</option>
-          ))}
-        </select>
-      </label>
+      {!props.hasStudentLookupCriteria ? (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+          학과, 학년, 반을 선택하면 학생을 조회할 수 있습니다.
+        </div>
+      ) : (
+        <label className="space-y-2">
+          <span className="field-label">학생</span>
+          <select className="input-base" value={props.selectedStudentId} onChange={(event) => props.handleStudentChange(event.target.value)}>
+            <option value="">{props.filteredStudents.length === 0 ? "조회된 학생이 없습니다" : "학생 선택"}</option>
+            {props.filteredStudents.map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.className} {student.number}번 {student.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {props.hasStudentLookupCriteria && props.selectedStudent ? (
+        <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm">
+          <p className="text-xs font-bold text-blue-700">선택 학생</p>
+          <p className="mt-1 font-bold text-slate-900">
+            {props.selectedStudent.className} {props.selectedStudent.number}번 {props.selectedStudent.name}
+          </p>
+          <p className="mt-1 text-xs font-semibold text-slate-600">
+            {props.selectedStudent.grade} · {selectedDepartmentLabel}
+          </p>
+        </div>
+      ) : props.hasStudentLookupCriteria ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+          학생을 선택하면 기본정보가 채워집니다.
+        </div>
+      ) : null}
 
       {mode === "subject" ? (
         <>
-          <label className="space-y-2">
-            <span className="field-label">학과</span>
-            <select className="input-base" value={props.department} onChange={(event) => props.setDepartment(event.target.value as Department)}>
-              {props.settingsOptions.departmentOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
           <label className="space-y-2">
             <span className="field-label">과목명</span>
             <SubjectSelect value={props.subjectName} options={props.settingsOptions.subjectOptions} onChange={props.setSubjectName} />
@@ -218,12 +240,7 @@ function BasicInfoStep(props: RecordComposerViewProps) {
             onUnitChange={props.setUnit}
           />
         </>
-      ) : (
-        <label className="space-y-2">
-          <span className="field-label">학급</span>
-          <input className="input-base" placeholder="예: 2-1" value={props.className} onChange={(event) => props.setClassName(event.target.value)} />
-        </label>
-      )}
+      ) : null}
     </section>
   );
 }

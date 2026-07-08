@@ -25,15 +25,24 @@ type RecordComposerConfig = {
 
 const fallbackSettingsOptions = getFallbackSettingsOptions();
 
+function sortClassNames(values: string[]) {
+  return [...values].sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
+}
+
 export type RecordComposerViewProps = {
   mode: CommentMode;
   config: RecordComposerConfig;
   settingsOptions: SettingsOptions;
   students: Student[];
+  filteredStudents: Student[];
   selectedStudentId: string;
   selectedStudent?: Student;
-  grade: (typeof gradeOptions)[number];
+  grade: string;
   department: Department;
+  selectedClasses: string[];
+  studentGradeOptions: string[];
+  studentClassOptions: string[];
+  hasStudentLookupCriteria: boolean;
   className: string;
   subjectName: string;
   subjectType: CurriculumSubjectType;
@@ -70,9 +79,10 @@ export type RecordComposerViewProps = {
   memoLength: number;
   canGenerate: boolean;
   handleStudentChange: (studentId: string) => void;
-  setGrade: (grade: (typeof gradeOptions)[number]) => void;
+  clearSelectedStudent: () => void;
+  setGrade: (grade: string) => void;
   setDepartment: (department: Department) => void;
-  setClassName: (className: string) => void;
+  setSelectedClasses: (values: string[]) => void;
   setSubjectName: (subjectName: string) => void;
   setLearningModule: (learningModule: string) => void;
   setTextbook: (textbook: string) => void;
@@ -123,8 +133,9 @@ export function RecordComposer({ mode }: RecordComposerProps) {
   const [schoolId, setSchoolId] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [grade, setGrade] = useState<(typeof gradeOptions)[number]>("1학년");
-  const [department, setDepartment] = useState<Department>("materials");
+  const [grade, setGrade] = useState("");
+  const [department, setDepartment] = useState<Department>("");
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [className, setClassName] = useState("");
   const [subjectName, setSubjectName] = useState("");
   const [textbook, setTextbook] = useState("");
@@ -166,10 +177,6 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       if (!isMounted) return;
 
       setSettingsOptions(options);
-      setDepartment((current) => {
-        if (options.departmentOptions.some((option) => option.value === current)) return current;
-        return options.departmentOptions[0]?.value || current;
-      });
     }
 
     async function loadStudents() {
@@ -177,12 +184,6 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       if (!isMounted) return;
 
       setStudents(result.students);
-      if (result.students[0]) {
-        setSelectedStudentId((current) => current || result.students[0].id);
-        setGrade(result.students[0].grade);
-        setDepartment(result.students[0].department);
-        setClassName(result.students[0].className);
-      }
     }
 
     async function loadProfile() {
@@ -206,6 +207,52 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     () => students.find((student) => student.id === selectedStudentId),
     [selectedStudentId, students]
   );
+  const hasStudentBaseCriteria = Boolean(department && grade);
+  const hasStudentLookupCriteria = hasStudentBaseCriteria && selectedClasses.length > 0;
+  const studentGradeOptions = useMemo(() => {
+    if (!department) return [];
+
+    const grades = new Set(students.filter((student) => student.department === department).map((student) => student.grade));
+    return gradeOptions.filter((option) => grades.has(option));
+  }, [department, students]);
+  const studentClassOptions = useMemo(() => {
+    if (!hasStudentBaseCriteria) return [];
+
+    const classes = students
+      .filter((student) => student.grade === grade)
+      .filter((student) => student.department === department)
+      .map((student) => student.className)
+      .filter(Boolean);
+
+    return sortClassNames(Array.from(new Set(classes)));
+  }, [department, grade, hasStudentBaseCriteria, students]);
+  const filteredStudents = useMemo(
+    () => {
+      if (!hasStudentLookupCriteria) return [];
+
+      return students
+        .filter((student) => student.grade === grade)
+        .filter((student) => student.department === department)
+        .filter((student) => selectedClasses.includes(student.className));
+    },
+    [department, grade, hasStudentLookupCriteria, selectedClasses, students]
+  );
+
+  useEffect(() => {
+    setSelectedClasses((current) => {
+      const validClassOptions = new Set(studentClassOptions);
+      const next = current.filter((classValue) => validClassOptions.has(classValue));
+      return next.length === current.length ? current : next;
+    });
+  }, [studentClassOptions]);
+
+  useEffect(() => {
+    if (!selectedStudentId) return;
+    if (filteredStudents.some((student) => student.id === selectedStudentId)) return;
+
+    setSelectedStudentId("");
+    setClassName("");
+  }, [filteredStudents, selectedStudentId]);
 
   function handleStudentChange(studentId: string) {
     setSelectedStudentId(studentId);
@@ -214,17 +261,31 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       setGrade(student.grade);
       setDepartment(student.department);
       setClassName(student.className);
+      return;
     }
+
+    setClassName("");
+  }
+
+  function clearSelectedStudent() {
+    setSelectedStudentId("");
+    setClassName("");
   }
 
   function buildPayload(): RecordFormPayload {
+    const payloadGrade = selectedStudent?.grade || grade;
+    const payloadDepartment = selectedStudent?.department || department;
+    const payloadClassName = selectedStudent?.className || className;
+
     if (mode === "behavior") {
       return {
         mode: "behavior",
+        selectedStudentId,
+        studentNo: selectedStudent?.number,
         studentName: selectedStudent?.name,
-        grade,
-        department,
-        className,
+        grade: payloadGrade,
+        department: payloadDepartment,
+        className: payloadClassName,
         schoolLifeAreas,
         industrialAttitudes,
         behaviorImprovements,
@@ -239,8 +300,9 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       selectedStudentId,
       studentNo: selectedStudent?.number,
       studentName: selectedStudent?.name,
-      grade,
-      department,
+      grade: payloadGrade,
+      department: payloadDepartment,
+      className: payloadClassName,
       subjectName,
       learningModule: subjectLearningModule.learningModule,
       textbook,
@@ -517,10 +579,11 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     observationMemo.trim().length > 0 || activityTypes.length > 0 || competencies.length > 0 || improvements.length > 0;
   const hasBehaviorGenerationInput =
     homeroomMemo.trim().length > 0 || schoolLifeAreas.length > 0 || industrialAttitudes.length > 0 || behaviorImprovements.length > 0;
+  const hasSelectedStudent = Boolean(selectedStudent);
   const canGenerate =
     mode === "subject"
-      ? subjectName.trim().length > 0 && hasSubjectGenerationInput
-      : className.trim().length > 0 && hasBehaviorGenerationInput;
+      ? hasSelectedStudent && subjectName.trim().length > 0 && hasSubjectGenerationInput
+      : hasSelectedStudent && className.trim().length > 0 && hasBehaviorGenerationInput;
   const viewSettingsOptions = settingsOptions || fallbackSettingsOptions;
 
   useEffect(() => {
@@ -538,10 +601,15 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     config,
     settingsOptions: viewSettingsOptions,
     students,
+    filteredStudents,
     selectedStudentId,
     selectedStudent,
     grade,
     department,
+    selectedClasses,
+    studentGradeOptions,
+    studentClassOptions,
+    hasStudentLookupCriteria,
     className,
     subjectName,
     subjectType: subjectLearningModule.selectedSubjectType,
@@ -578,9 +646,10 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     memoLength,
     canGenerate,
     handleStudentChange,
+    clearSelectedStudent,
     setGrade,
     setDepartment,
-    setClassName,
+    setSelectedClasses,
     setSubjectName,
     setLearningModule: subjectLearningModule.setLearningModule,
     setTextbook,
