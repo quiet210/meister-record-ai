@@ -18,7 +18,7 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
   const { mode, config } = props;
   const { settingsOptions } = props;
   const selectedDepartmentLabel = props.selectedStudent
-    ? settingsOptions.departmentOptions.find((option) => option.value === props.selectedStudent?.department)?.label || props.selectedStudent.department
+    ? props.studentDepartmentOptions.find((option) => option.value === props.selectedStudent?.department)?.label || props.selectedStudent.department
     : "";
 
   return (
@@ -57,10 +57,10 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
                 department={props.department}
                 selectedClasses={props.selectedClasses}
                 gradeOptions={props.studentGradeOptions}
-                departmentOptions={settingsOptions.departmentOptions}
+                departmentOptions={props.studentDepartmentOptions}
                 classOptions={props.studentClassOptions}
-                onGradeChange={props.setGrade}
-                onDepartmentChange={props.setDepartment}
+                onGradeChange={props.setGradeFilter}
+                onDepartmentChange={props.setDepartmentFilter}
                 onSelectedClassesChange={props.setSelectedClasses}
                 onFilterChange={props.clearSelectedStudent}
                 disabled={props.isLoading}

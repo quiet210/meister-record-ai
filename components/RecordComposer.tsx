@@ -40,6 +40,7 @@ export type RecordComposerViewProps = {
   grade: string;
   department: Department;
   selectedClasses: string[];
+  studentDepartmentOptions: SettingsOptions["departmentOptions"];
   studentGradeOptions: string[];
   studentClassOptions: string[];
   hasStudentLookupCriteria: boolean;
@@ -80,8 +81,8 @@ export type RecordComposerViewProps = {
   canGenerate: boolean;
   handleStudentChange: (studentId: string) => void;
   clearSelectedStudent: () => void;
-  setGrade: (grade: string) => void;
-  setDepartment: (department: Department) => void;
+  setGradeFilter: (grade: string) => void;
+  setDepartmentFilter: (department: Department) => void;
   setSelectedClasses: (values: string[]) => void;
   setSubjectName: (subjectName: string) => void;
   setLearningModule: (learningModule: string) => void;
@@ -607,6 +608,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     grade,
     department,
     selectedClasses,
+    studentDepartmentOptions: viewSettingsOptions.departmentOptions,
     studentGradeOptions,
     studentClassOptions,
     hasStudentLookupCriteria,
@@ -647,8 +649,8 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     canGenerate,
     handleStudentChange,
     clearSelectedStudent,
-    setGrade,
-    setDepartment,
+    setGradeFilter: setGrade,
+    setDepartmentFilter: setDepartment,
     setSelectedClasses,
     setSubjectName,
     setLearningModule: subjectLearningModule.setLearningModule,

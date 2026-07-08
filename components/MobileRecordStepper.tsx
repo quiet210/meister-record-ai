@@ -160,7 +160,7 @@ export function MobileRecordStepper(props: RecordComposerViewProps) {
 function BasicInfoStep(props: RecordComposerViewProps) {
   const { mode } = props;
   const selectedDepartmentLabel = props.selectedStudent
-    ? props.settingsOptions.departmentOptions.find((option) => option.value === props.selectedStudent?.department)?.label || props.selectedStudent.department
+    ? props.studentDepartmentOptions.find((option) => option.value === props.selectedStudent?.department)?.label || props.selectedStudent.department
     : "";
 
   return (
@@ -172,10 +172,10 @@ function BasicInfoStep(props: RecordComposerViewProps) {
         department={props.department}
         selectedClasses={props.selectedClasses}
         gradeOptions={props.studentGradeOptions}
-        departmentOptions={props.settingsOptions.departmentOptions}
+        departmentOptions={props.studentDepartmentOptions}
         classOptions={props.studentClassOptions}
-        onGradeChange={props.setGrade}
-        onDepartmentChange={props.setDepartment}
+        onGradeChange={props.setGradeFilter}
+        onDepartmentChange={props.setDepartmentFilter}
         onSelectedClassesChange={props.setSelectedClasses}
         onFilterChange={props.clearSelectedStudent}
         disabled={props.isLoading}
