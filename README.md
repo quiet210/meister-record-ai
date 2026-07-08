@@ -93,6 +93,7 @@
 ### 과세특
 
 - 학생 선택 후 과목, 학습모듈, 단원, 활동유형, 역량키워드, 보완점, 교사 관찰 메모를 입력해 과세특 초안 생성
+- 개별 작성 기본정보 영역은 공통 `StudentFilter`로 학과 -> 학년 -> 반 순서의 조회 UX를 사용하고, 여러 반의 학생을 합쳐 표시하되 생성 대상 학생은 1명만 선택
 - 과목 선택 시 `curriculum_subjects.subject_type`을 함께 확인해 일반교과(`general`)와 NCS교과(`ncs`)를 판정
 - 과목 선택 UI는 `curriculum_subjects` 전체 목록 또는 fallback 전체 목록을 options로 유지하고, 선택 과목명은 value로만 관리
 - 생성 API는 로그인 토큰으로 서버에서 확인한 학교 ID만 사용해 성취기준을 조회
@@ -111,6 +112,7 @@
 ### 행동특성
 
 - 학생 선택 후 학교생활 영역, 생활태도, 협업/관계, 책임감/성실성, 보완점, 담임 관찰 메모를 입력해 행동특성 및 종합의견 초안 생성
+- 개별 작성 기본정보 영역은 공통 `StudentFilter`로 학과 -> 학년 -> 반 순서의 조회 UX를 사용하고, 여러 반의 학생을 합쳐 표시하되 생성 대상 학생은 1명만 선택
 - 생활태도, 협업, 책임감, 보완점은 필수 선택이 아니며, 담임 관찰 메모 또는 선택 항목 중 하나 이상 있으면 생성 가능
 - 학교생활 전반, 관계, 책임감, 성실성, 진로태도, 안전의식, 직업윤리 중심 문체로 생성
 - 생성 결과를 `record_drafts`에 AI 원본으로 저장
@@ -226,8 +228,8 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 
 화면 단위 UI와 업무 컴포넌트가 들어 있습니다.
 
-- `RecordComposer`: 단일 과세특/행특 생성 상태와 저장 흐름 관리
-- `DesktopRecordComposer`, `MobileRecordStepper`: 단일 생성 반응형 UI
+- `RecordComposer`: 단일 과세특/행특 생성 상태, 공통 학생 조회 필터 상태, 저장 흐름 관리
+- `DesktopRecordComposer`, `MobileRecordStepper`: 단일 생성 반응형 UI와 학과 -> 학년 -> 반 기반 학생 단일 선택
 - `StudentFilter`: 학생 조회 공통 필터. 학과 -> 학년 -> 반 순서, 반 멀티셀렉트 드롭다운, 선택 반 chip, 조건 초기화 제공
 - `SubjectSelect`: 과목 선택 공통 select. 전체 과목 options와 선택 value를 분리해 관리
 - `SubjectLearningModuleControls`, `useSubjectLearningModule`: 과세특 학습모듈 선택, 단원 후보, 성취기준 미리보기 공통 처리
@@ -505,6 +507,7 @@ GitHub: https://github.com/quiet210/meister-record-ai
 - 과목/성취기준 관리 화면을 조회 기반 UI로 개선
 - 선택 과목 기준 성취기준 조회와 학습모듈별 그룹 표시 적용
 - 학생 조회 UX를 학과 -> 학년 -> 반 구조로 변경하고, 반 선택을 멀티셀렉트 드롭다운으로 유지
+- 과세특/행동특성 개별작성 학생조회 UX를 일괄작성과 동일한 학과 -> 학년 -> 반 구조로 통일
 - 공통 `StudentFilter`에서 반 선택 해제 시 학생 목록과 입력 테이블이 다시 표시되지 않도록 개선
 - 학생 삭제 시 `record_drafts`를 삭제하지 않고 archive 처리해 `record_drafts_one_current_per_scope_idx` 충돌 방지
 - 일괄 과세특, 일괄 행특, 학생부 관리 화면 성능 최적화 작업 완료
