@@ -33,6 +33,7 @@ export type SubjectRecordFormPayload = {
   studentName?: string;
   grade: string;
   department: Department;
+  className?: string;
   subjectName: string;
   learningModule?: string;
   textbook: string;
@@ -47,6 +48,8 @@ export type SubjectRecordFormPayload = {
 
 export type BehaviorRecordFormPayload = {
   mode: "behavior";
+  selectedStudentId?: string;
+  studentNo?: string;
   studentName?: string;
   grade: string;
   department?: Department;
