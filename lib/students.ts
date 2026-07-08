@@ -43,6 +43,12 @@ type StudentsBulkResult = {
   error?: string;
 };
 
+type DeleteStudentsResult = {
+  deletedCount: number;
+  errors: string[];
+  error?: string;
+};
+
 type SupabaseErrorLike = {
   message?: string;
   code?: string;
@@ -401,4 +407,25 @@ export async function deleteStudent(id: string): Promise<{ error?: string }> {
   }
 
   return {};
+}
+
+export async function deleteStudents(ids: string[]): Promise<DeleteStudentsResult> {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  const errors: string[] = [];
+  let deletedCount = 0;
+
+  for (const id of uniqueIds) {
+    const result = await deleteStudent(id);
+    if (result.error) {
+      errors.push(result.error);
+    } else {
+      deletedCount += 1;
+    }
+  }
+
+  return {
+    deletedCount,
+    errors,
+    error: errors.length > 0 ? `${deletedCount}명 삭제 완료, ${errors.length}명 삭제 실패` : undefined
+  };
 }
