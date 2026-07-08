@@ -52,6 +52,7 @@
 - 학생 관리 화면 최초 진입 시 목록을 숨기고, 학과, 학년, 반 선택 후 목록 표시
 - 학과/학년/반 필수 필터와 반 멀티셀렉트, 이름 검색 유지
 - 학생 추가, 수정, 삭제
+- 학생 삭제 시 연결된 `record_drafts`는 삭제하지 않고 학생 스냅샷과 함께 archive 처리
 - 학년, 학과, 반, 번호, 이름 관리
 - 학생 엑셀 업로드
 - 학생 업로드 템플릿 다운로드
@@ -166,6 +167,7 @@
 - `status`: `ai_generated`, `editing`, `saved`, `finalized`
 - `edited_at`, `finalized_at`, `edited_by` 저장
 - 최종 출력 선택 규칙은 `final_content -> edited_content -> ai_content -> draft_text`
+- 학생 삭제 전 해당 학생의 `record_drafts`는 `is_current = false`와 `archived_at`, 삭제 학생 스냅샷을 저장해 current unique index 충돌을 방지
 
 ### 중복도 분석
 
@@ -273,6 +275,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `migrations/20260702_secure_record_drafts_rls.sql`: 학생부 개인 소유 RLS, 사용자 관리 RLS, 생성 API 우회 방지 보강
 - `migrations/20260703_curriculum_upload_auto_subjects.sql`: 성취기준 업로드 upsert용 중복 방지 인덱스와 과목명 정규화 조회 인덱스
 - `migrations/20260706_record_drafts_current_versions.sql`: `record_drafts` 현재본 컬럼, 기준별 current unique index, 기존 데이터 current backfill
+- `migrations/20260708_archive_record_drafts_on_student_delete.sql`: 학생 삭제 전 학생부 초안 archive와 삭제 학생 스냅샷 보존 trigger
 
 ## 4. 주요 화면
 
@@ -502,6 +505,7 @@ GitHub: https://github.com/quiet210/meister-record-ai
 - 선택 과목 기준 성취기준 조회와 학습모듈별 그룹 표시 적용
 - 학생 조회 UX를 학과 -> 학년 -> 반 구조로 변경하고, 반 선택을 멀티셀렉트 드롭다운으로 유지
 - 공통 `StudentFilter`에서 반 선택 해제 시 학생 목록과 입력 테이블이 다시 표시되지 않도록 개선
+- 학생 삭제 시 `record_drafts`를 삭제하지 않고 archive 처리해 `record_drafts_one_current_per_scope_idx` 충돌 방지
 - 일괄 과세특, 일괄 행특, 학생부 관리 화면 성능 최적화 작업 완료
 - `lib/generate-api-client.ts` 누락으로 발생하던 빌드 오류 해결
 - `record_drafts` RLS를 현재 로그인 교사 `user_id` 기준으로 강화

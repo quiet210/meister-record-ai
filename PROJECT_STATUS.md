@@ -1,6 +1,6 @@
 # Project Status
 
-최종 업데이트: 2026-07-07
+최종 업데이트: 2026-07-08
 
 ## 완료
 
@@ -21,6 +21,7 @@
   - 학생 추가
   - 학생 수정
   - 학생 삭제
+  - 학생 삭제 시 연결된 `record_drafts`는 삭제하지 않고 삭제 학생 스냅샷과 함께 archive 처리
   - 학교 ID 기준 데이터 분리
 
 - 학생 엑셀 업로드
@@ -143,6 +144,7 @@
   - 현재본 판단 기준을 `user_id + school_id + student_id + mode + subject_name + academic_year + semester`로 정리
   - 같은 기준의 현재본이 있으면 새 AI 생성 시 insert 대신 현재 row update 적용
   - 최종 확정 현재본은 새 AI 생성으로 자동 덮어쓰지 않고 최종 해제 또는 새 결과 사용 흐름으로만 변경
+  - 학생 삭제 전 해당 학생의 `record_drafts`를 `is_current = false`로 archive해 `student_id = null` current unique index 충돌 방지
 
 - 자동 저장
   - 교사 수정본 3초 자동 저장 구현
@@ -349,3 +351,9 @@
   - 반 선택을 체크박스 멀티셀렉트 드롭다운과 선택 반 chip 구조로 변경
   - 반 선택 해제 시 학생 목록, 학생 입력 테이블, 학생부 상세가 다시 표시되지 않도록 개선
   - 과세특 50명 선택 제한과 기존 생성/lifecycle/중복도/엑셀 다운로드 흐름 유지
+
+- 2026-07-08
+  - `20260708_archive_record_drafts_on_student_delete.sql` migration 추가
+  - 학생 삭제 전 `record_drafts`에 삭제 학생 id/name/grade/department/class/number 스냅샷과 archive metadata 저장
+  - `students` 삭제 trigger에서 해당 학생의 모든 `record_drafts.is_current`를 false로 변경해 FK `ON DELETE SET NULL` 이후 unique index 충돌 방지
+  - `deleteStudent`에서 학생 삭제 전 현재 사용자가 소유한 학생부 초안을 먼저 archive 처리하도록 보강
