@@ -15,6 +15,8 @@ export type UserProfile = {
   email: string;
   name: string;
   role: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type StudentRow = {
@@ -116,7 +118,7 @@ export async function ensureUserProfile(): Promise<{ profile?: UserProfile; erro
 
   const { data: existingProfile, error: selectError } = await supabase
     .from("users")
-    .select("id, school_id, email, name, role")
+    .select("id, school_id, email, name, role, created_at, updated_at")
     .eq("id", authUser.id)
     .maybeSingle();
 
@@ -155,13 +157,13 @@ export async function ensureUserProfile(): Promise<{ profile?: UserProfile; erro
       name,
       role: "teacher"
     })
-    .select("id, school_id, email, name, role")
+    .select("id, school_id, email, name, role, created_at, updated_at")
     .single();
 
   if (insertError) {
     const { data: retriedProfile, error: retryError } = await supabase
       .from("users")
-      .select("id, school_id, email, name, role")
+      .select("id, school_id, email, name, role, created_at, updated_at")
       .eq("id", authUser.id)
       .maybeSingle();
 
