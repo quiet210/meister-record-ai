@@ -230,14 +230,13 @@ function BasicInfoStep(props: RecordComposerViewProps) {
             subjectType={props.subjectType}
             learningModule={props.learningModule}
             learningModuleOptions={props.learningModuleOptions}
-            unit={props.unit}
+            units={props.units}
             unitOptions={props.learningModuleUnitOptions}
             previewStandards={props.learningModulePreviewStandards}
             isLoading={props.isLearningModuleLoading}
             error={props.learningModuleError}
-            datalistId="unit-options-mobile"
             onLearningModuleChange={props.setLearningModule}
-            onUnitChange={props.setUnit}
+            onUnitsChange={props.setUnits}
           />
         </>
       ) : null}
