@@ -53,8 +53,8 @@ export function DesktopRecordComposer(props: RecordComposerViewProps) {
               <StudentFilter
                 title="학생 조회"
                 description="학과, 학년, 반을 순서대로 선택합니다. 반은 여러 개 선택할 수 있습니다."
-                grade={props.grade}
-                department={props.department}
+                grade={props.gradeFilter}
+                department={props.departmentFilter}
                 selectedClasses={props.selectedClasses}
                 gradeOptions={props.studentGradeOptions}
                 departmentOptions={props.studentDepartmentOptions}

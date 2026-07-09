@@ -39,6 +39,8 @@ export type RecordComposerViewProps = {
   selectedStudent?: Student;
   grade: string;
   department: Department;
+  gradeFilter: string;
+  departmentFilter: Department;
   selectedClasses: string[];
   studentDepartmentOptions: SettingsOptions["departmentOptions"];
   studentGradeOptions: string[];
@@ -607,6 +609,8 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     selectedStudent,
     grade,
     department,
+    gradeFilter: grade,
+    departmentFilter: department,
     selectedClasses,
     studentDepartmentOptions: viewSettingsOptions.departmentOptions,
     studentGradeOptions,
