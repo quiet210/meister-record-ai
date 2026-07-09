@@ -23,6 +23,7 @@ import {
 } from "@/lib/record-drafts";
 import { listStudentRecordDrafts, type StudentRecordDraft } from "@/lib/student-records";
 import { ensureUserProfile, listStudents } from "@/lib/students";
+import { sortClassNames, sortStudents } from "@/lib/student-sort";
 import { gradeOptions } from "@/lib/options";
 import type { CommentMode, GenerateResponse, Student } from "@/lib/types";
 import { StudentFilter } from "@/components/StudentFilter";
@@ -48,10 +49,6 @@ const modeMeta: Record<CommentMode, { title: string; shortTitle: string; endpoin
     endpoint: "/api/generate/behavior-comment"
   }
 };
-
-function sortClassNames(values: string[]) {
-  return [...values].sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
-}
 
 function formatDateTime(value: string) {
   if (!value) return "-";
@@ -215,11 +212,13 @@ export function StudentRecordCenter() {
 
     if (!hasStudentLookupCriteria) return [];
 
-    return students
-      .filter((student) => !normalizedQuery || student.name.toLowerCase().includes(normalizedQuery))
-      .filter((student) => student.grade === gradeFilter)
-      .filter((student) => student.department === departmentFilter)
-      .filter((student) => classFilters.length === 0 || classFilters.includes(student.className));
+    return sortStudents(
+      students
+        .filter((student) => !normalizedQuery || student.name.toLowerCase().includes(normalizedQuery))
+        .filter((student) => student.grade === gradeFilter)
+        .filter((student) => student.department === departmentFilter)
+        .filter((student) => classFilters.length === 0 || classFilters.includes(student.className))
+    );
   }, [classFilters, departmentFilter, gradeFilter, hasStudentLookupCriteria, query, students]);
 
   const draftIndex = useMemo(() => {

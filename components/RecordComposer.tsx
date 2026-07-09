@@ -6,6 +6,7 @@ import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions }
 import { postGenerateApi } from "@/lib/generate-api-client";
 import { finalizeRecordDraft, getEffectiveRecordContent, saveEditedRecordDraft, saveRecordDraft, unfinalizeRecordDraft } from "@/lib/record-drafts";
 import { ensureUserProfile, listStudents } from "@/lib/students";
+import { sortClassNames, sortStudents } from "@/lib/student-sort";
 import type { CurriculumStandard, CurriculumSubjectType } from "@/lib/curriculum";
 import type { CommentLength, CommentMode, Department, GenerateResponse, RecordDraftLifecycleStatus, RecordFormPayload, Student } from "@/lib/types";
 import { DesktopRecordComposer } from "@/components/DesktopRecordComposer";
@@ -24,10 +25,6 @@ type RecordComposerConfig = {
 };
 
 const fallbackSettingsOptions = getFallbackSettingsOptions();
-
-function sortClassNames(values: string[]) {
-  return [...values].sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
-}
 
 export type RecordComposerViewProps = {
   mode: CommentMode;
@@ -58,6 +55,7 @@ export type RecordComposerViewProps = {
   learningModuleError: string;
   textbook: string;
   unit: string;
+  units: string[];
   activityTypes: string[];
   competencies: string[];
   improvements: string[];
@@ -89,7 +87,7 @@ export type RecordComposerViewProps = {
   setSubjectName: (subjectName: string) => void;
   setLearningModule: (learningModule: string) => void;
   setTextbook: (textbook: string) => void;
-  setUnit: (unit: string) => void;
+  setUnits: (units: string[]) => void;
   setActivityTypes: (values: string[]) => void;
   setCompetencies: (values: string[]) => void;
   setImprovements: (values: string[]) => void;
@@ -143,6 +141,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
   const [subjectName, setSubjectName] = useState("");
   const [textbook, setTextbook] = useState("");
   const [unit, setUnit] = useState("");
+  const [units, setUnits] = useState<string[]>([]);
   const [activityTypes, setActivityTypes] = useState<string[]>([]);
   const [competencies, setCompetencies] = useState<string[]>([]);
   const [improvements, setImprovements] = useState<string[]>([]);
@@ -169,8 +168,15 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     enabled: mode === "subject",
     subjectName,
     curriculumSubjects: settingsOptions.curriculumSubjects,
-    setUnit
+    units,
+    setUnit,
+    setUnits
   });
+
+  function updateUnits(nextUnits: string[]) {
+    setUnits(nextUnits);
+    setUnit(nextUnits.join(", "));
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -233,10 +239,12 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     () => {
       if (!hasStudentLookupCriteria) return [];
 
-      return students
-        .filter((student) => student.grade === grade)
-        .filter((student) => student.department === department)
-        .filter((student) => selectedClasses.includes(student.className));
+      return sortStudents(
+        students
+          .filter((student) => student.grade === grade)
+          .filter((student) => student.department === department)
+          .filter((student) => selectedClasses.includes(student.className))
+      );
     },
     [department, grade, hasStudentLookupCriteria, selectedClasses, students]
   );
@@ -310,6 +318,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       learningModule: subjectLearningModule.learningModule,
       textbook,
       unit,
+      units,
       activityTypes,
       competencies,
       improvements,
@@ -322,6 +331,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
       setTextbook("");
       subjectLearningModule.setLearningModule("");
       setUnit("");
+      setUnits([]);
       setActivityTypes([]);
       setCompetencies([]);
       setImprovements([]);
@@ -628,6 +638,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     learningModuleError: subjectLearningModule.learningModuleError,
     textbook,
     unit,
+    units,
     activityTypes,
     competencies,
     improvements,
@@ -659,7 +670,7 @@ export function RecordComposer({ mode }: RecordComposerProps) {
     setSubjectName,
     setLearningModule: subjectLearningModule.setLearningModule,
     setTextbook,
-    setUnit,
+    setUnits: updateUnits,
     setActivityTypes,
     setCompetencies,
     setImprovements,

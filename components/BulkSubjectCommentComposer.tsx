@@ -1,12 +1,13 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw, Sparkles, UsersRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw, Sparkles } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
 import { downloadSubjectCommentResults, type SubjectCommentResultExportRow } from "@/lib/export-results";
 import { postGenerateApi } from "@/lib/generate-api-client";
 import { gradeOptions } from "@/lib/options";
+import { sortClassNames, sortStudents } from "@/lib/student-sort";
 import {
   finalizeRecordDraft,
   getEffectiveRecordContent,
@@ -123,10 +124,6 @@ function getStatusMeta(status: BulkStatus) {
     label: "대기",
     className: "border-slate-200 bg-slate-50 text-slate-600"
   };
-}
-
-function sortClassNames(values: string[]) {
-  return [...values].sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
 }
 
 function getStudentWarnings(input: StudentSubjectInput) {
@@ -492,17 +489,26 @@ export function BulkSubjectCommentComposer() {
   const [classFilters, setClassFilters] = useState<string[]>([]);
   const [subjectName, setSubjectName] = useState("");
   const [unit, setUnit] = useState("");
+  const [units, setUnits] = useState<string[]>([]);
   const [lengthOption, setLengthOption] = useState<CommentLength>("medium");
   const [writingStyle, setWritingStyle] = useState(writingStyleOptions[0]);
   const [bulkInput, setBulkInput] = useState<BulkApplyInput>(() => makeInitialBulkInput());
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState("");
+  const filteredSelectCheckboxRef = useRef<HTMLInputElement | null>(null);
   const subjectLearningModule = useSubjectLearningModule({
     subjectName,
     curriculumSubjects: settingsOptions.curriculumSubjects,
-    setUnit
+    units,
+    setUnit,
+    setUnits
   });
+
+  function updateUnits(nextUnits: string[]) {
+    setUnits(nextUnits);
+    setUnit(nextUnits.join(", "));
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -587,10 +593,12 @@ export function BulkSubjectCommentComposer() {
     () => {
       if (!hasStudentLookupCriteria) return [];
 
-      return students
-        .filter((student) => student.grade === gradeFilter)
-        .filter((student) => student.department === departmentFilter)
-        .filter((student) => classFilters.length === 0 || classFilters.includes(student.className));
+      return sortStudents(
+        students
+          .filter((student) => student.grade === gradeFilter)
+          .filter((student) => student.department === departmentFilter)
+          .filter((student) => classFilters.length === 0 || classFilters.includes(student.className))
+      );
     },
     [classFilters, departmentFilter, gradeFilter, hasStudentLookupCriteria, students]
   );
@@ -654,6 +662,17 @@ export function BulkSubjectCommentComposer() {
     () => filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id)),
     [filteredStudents, selectedStudentIdSet]
   );
+  const filteredSelectedCount = useMemo(
+    () => filteredStudents.filter((student) => selectedStudentIdSet.has(student.id)).length,
+    [filteredStudents, selectedStudentIdSet]
+  );
+  const hasPartialFilteredSelection = filteredSelectedCount > 0 && !allFilteredSelected;
+
+  useEffect(() => {
+    if (filteredSelectCheckboxRef.current) {
+      filteredSelectCheckboxRef.current.indeterminate = hasPartialFilteredSelection;
+    }
+  }, [hasPartialFilteredSelection]);
 
   useEffect(() => {
     if (hasStudentLookupCriteria) return;
@@ -757,21 +776,34 @@ export function BulkSubjectCommentComposer() {
     if (allFilteredSelected) {
       const filteredIds = new Set(filteredStudents.map((student) => student.id));
       setSelectedStudentIds((current) => current.filter((id) => !filteredIds.has(id)));
+      setMessage("");
       return;
     }
 
     const filteredIds = filteredStudents.map((student) => student.id);
     const missingFilteredIds = filteredIds.filter((id) => !selectedStudentIdSet.has(id));
-    if (filteredStudents.length > maxSelectableStudents || selectedStudents.length + missingFilteredIds.length > maxSelectableStudents) {
-      setMessage(selectionLimitMessage);
+    if (filteredStudents.length > maxSelectableStudents) {
+      setMessage(`조회 학생 ${filteredStudents.length}명은 최대 ${maxSelectableStudents}명을 초과해 전체 선택할 수 없습니다.`);
+      return;
+    }
+    if (selectedStudents.length + missingFilteredIds.length > maxSelectableStudents) {
+      setMessage(`현재 선택 ${selectedStudents.length}명에 조회 학생 ${missingFilteredIds.length}명을 더하면 최대 ${maxSelectableStudents}명을 초과합니다.`);
       return;
     }
 
     setSelectedStudentIds((current) => Array.from(new Set([...current, ...filteredIds])));
+    setMessage("");
   }, [allFilteredSelected, filteredStudents, selectedStudentIdSet, selectedStudents.length]);
+
+  const clearFilteredSelection = useCallback(() => {
+    const filteredIds = new Set(filteredStudents.map((student) => student.id));
+    setSelectedStudentIds((current) => current.filter((id) => !filteredIds.has(id)));
+    setMessage("");
+  }, [filteredStudents]);
 
   const clearSelection = useCallback(() => {
     setSelectedStudentIds([]);
+    setMessage("");
   }, []);
 
   const updateBulkInput = useCallback((patch: Partial<BulkApplyInput>) => {
@@ -943,6 +975,7 @@ export function BulkSubjectCommentComposer() {
       learningModule: subjectLearningModule.learningModule,
       textbook: "",
       unit,
+      units,
       lengthOption,
       writingStyle,
       activityTypes: input.activityTypes,
@@ -1586,7 +1619,7 @@ export function BulkSubjectCommentComposer() {
     }, 3000);
 
     return () => window.clearTimeout(timer);
-  }, [studentInputs, students, subjectName, subjectLearningModule.learningModule, unit, lengthOption, writingStyle]);
+  }, [studentInputs, students, subjectName, subjectLearningModule.learningModule, unit, units, lengthOption, writingStyle]);
 
   return (
     <div className="min-w-0 space-y-5">
@@ -1677,15 +1710,14 @@ export function BulkSubjectCommentComposer() {
             subjectType={subjectLearningModule.selectedSubjectType}
             learningModule={subjectLearningModule.learningModule}
             learningModuleOptions={subjectLearningModule.learningModuleOptions}
-            unit={unit}
+            units={units}
             unitOptions={subjectLearningModule.unitOptions}
             previewStandards={subjectLearningModule.previewStandards}
             isLoading={subjectLearningModule.isLearningModuleLoading}
             error={subjectLearningModule.learningModuleError}
             disabled={isGenerating}
-            datalistId="bulk-unit-options"
             onLearningModuleChange={subjectLearningModule.setLearningModule}
-            onUnitChange={setUnit}
+            onUnitsChange={updateUnits}
           />
         </div>
       </section>
@@ -1697,15 +1729,6 @@ export function BulkSubjectCommentComposer() {
             <p className="mt-1 text-sm text-slate-500">학과, 학년, 반을 선택하면 학생 입력 테이블이 표시됩니다.</p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button className="secondary-button" type="button" onClick={toggleFilteredStudents} disabled={!hasStudentLookupCriteria || filteredStudents.length === 0 || isGenerating}>
-              <UsersRound size={17} aria-hidden="true" />
-              {allFilteredSelected ? "필터 학생 선택 해제" : "필터 학생 전체 선택"}
-            </button>
-            <button className="secondary-button" type="button" onClick={clearSelection} disabled={selectedStudents.length === 0 || isGenerating}>
-              학생 선택 초기화
-            </button>
-          </div>
         </div>
 
         <StudentFilter
@@ -1734,15 +1757,36 @@ export function BulkSubjectCommentComposer() {
               필터 결과 {filteredStudents.length}명 · 선택 {selectedStudents.length}명 / 최대 {maxSelectableStudents}명
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button className="primary-button" type="button" onClick={generateSelectedStudents} disabled={!canGenerate}>
-              {isGenerating ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <Sparkles size={18} aria-hidden="true" />}
-              선택 학생 생성
-            </button>
-            <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={!hasStudentLookupCriteria || failedStudents.length === 0 || isGenerating || !hasSubjectName}>
-              <RefreshCcw size={17} aria-hidden="true" />
-              실패만 재생성
-            </button>
+          <div className="flex flex-col gap-2 lg:items-end">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                <input
+                  ref={filteredSelectCheckboxRef}
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  checked={allFilteredSelected}
+                  onChange={toggleFilteredStudents}
+                  disabled={!hasStudentLookupCriteria || filteredStudents.length === 0 || isGenerating}
+                />
+                조회 학생 전체 선택
+              </label>
+              <button className="secondary-button" type="button" onClick={clearFilteredSelection} disabled={filteredSelectedCount === 0 || isGenerating}>
+                조회 학생 전체 해제
+              </button>
+              <button className="secondary-button" type="button" onClick={clearSelection} disabled={selectedStudents.length === 0 || isGenerating}>
+                전체 선택 초기화
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="primary-button" type="button" onClick={generateSelectedStudents} disabled={!canGenerate}>
+                {isGenerating ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <Sparkles size={18} aria-hidden="true" />}
+                선택 학생 생성
+              </button>
+              <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={!hasStudentLookupCriteria || failedStudents.length === 0 || isGenerating || !hasSubjectName}>
+                <RefreshCcw size={17} aria-hidden="true" />
+                실패만 재생성
+              </button>
+            </div>
           </div>
         </div>
 

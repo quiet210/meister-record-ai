@@ -1,22 +1,22 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Loader2, Plus, X } from "lucide-react";
 import { curriculumSubjectTypeLabels, type CurriculumStandard, type CurriculumSubjectType } from "@/lib/curriculum";
 
 type SubjectLearningModuleControlsProps = {
   subjectType: CurriculumSubjectType;
   learningModule: string;
   learningModuleOptions: string[];
-  unit: string;
+  units: string[];
   unitOptions: string[];
   previewStandards: CurriculumStandard[];
   isLoading: boolean;
   error?: string;
   disabled?: boolean;
-  datalistId: string;
   className?: string;
   onLearningModuleChange: (value: string) => void;
-  onUnitChange: (value: string) => void;
+  onUnitsChange: (values: string[]) => void;
 };
 
 function learningModuleHelpText(subjectType: CurriculumSubjectType, isLoading: boolean, optionCount: number) {
@@ -30,20 +30,50 @@ export function SubjectLearningModuleControls({
   subjectType,
   learningModule,
   learningModuleOptions,
-  unit,
+  units,
   unitOptions,
   previewStandards,
   isLoading,
   error,
   disabled = false,
-  datalistId,
   className = "",
   onLearningModuleChange,
-  onUnitChange
+  onUnitsChange
 }: SubjectLearningModuleControlsProps) {
+  const [customUnit, setCustomUnit] = useState("");
   const isNcsSubject = subjectType === "ncs";
   const moduleDisabled = disabled || !isNcsSubject || isLoading;
-  const unitListId = unitOptions.length > 0 ? datalistId : undefined;
+  const selectedUnits = useMemo(() => {
+    const seen = new Set<string>();
+    const next: string[] = [];
+
+    units.forEach((unit) => {
+      const normalized = unit.trim().replace(/\s+/g, " ");
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      next.push(normalized);
+    });
+
+    return next;
+  }, [units]);
+  const selectedUnitSet = useMemo(() => new Set(selectedUnits), [selectedUnits]);
+  const selectableUnitOptions = useMemo(() => unitOptions.filter((option) => !selectedUnitSet.has(option)), [selectedUnitSet, unitOptions]);
+  const unitSelectDisabled = disabled || !learningModule || unitOptions.length === 0;
+
+  function addUnit(value: string) {
+    const normalized = value.trim().replace(/\s+/g, " ");
+    if (!normalized || selectedUnitSet.has(normalized)) return;
+    onUnitsChange([...selectedUnits, normalized]);
+  }
+
+  function removeUnit(value: string) {
+    onUnitsChange(selectedUnits.filter((unit) => unit !== value));
+  }
+
+  function addCustomUnit() {
+    addUnit(customUnit);
+    setCustomUnit("");
+  }
 
   return (
     <div className={`min-w-0 space-y-3 ${className}`}>
@@ -70,25 +100,70 @@ export function SubjectLearningModuleControls({
           {error ? <span className="block text-xs font-semibold text-rose-700">{error}</span> : null}
         </label>
 
-        <label className="space-y-2">
+        <div className="space-y-2">
           <span className="field-label">단원</span>
-          <input
+          <select
             className="input-base"
-            list={unitListId}
-            placeholder="예: 센서 입력과 PLC 기본 명령어"
-            value={unit}
-            onChange={(event) => onUnitChange(event.target.value)}
-            disabled={disabled}
-          />
-          {unitOptions.length > 0 ? (
-            <datalist id={datalistId}>
-              {unitOptions.map((option) => (
-                <option key={option} value={option} />
+            value=""
+            onChange={(event) => addUnit(event.target.value)}
+            disabled={unitSelectDisabled || selectableUnitOptions.length === 0}
+          >
+            <option value="">
+              {!learningModule ? "학습모듈 선택 후 단원 선택" : selectableUnitOptions.length === 0 ? "선택 가능한 단원이 없습니다" : "단원 선택"}
+            </option>
+            {selectableUnitOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex gap-2">
+            <input
+              className="input-base min-w-0"
+              placeholder="직접 입력 단원 추가"
+              value={customUnit}
+              onChange={(event) => setCustomUnit(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addCustomUnit();
+                }
+              }}
+              disabled={disabled}
+            />
+            <button
+              className="secondary-button shrink-0"
+              type="button"
+              onClick={addCustomUnit}
+              disabled={disabled || customUnit.trim().length === 0}
+            >
+              <Plus size={16} aria-hidden="true" />
+              추가
+            </button>
+          </div>
+
+          {selectedUnits.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedUnits.map((selectedUnit) => (
+                <span key={selectedUnit} className="inline-flex min-h-8 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-800">
+                  {selectedUnit}
+                  <button
+                    type="button"
+                    className="inline-flex h-5 w-5 items-center justify-center rounded text-blue-700 hover:bg-blue-100 disabled:text-blue-300"
+                    onClick={() => removeUnit(selectedUnit)}
+                    disabled={disabled}
+                    aria-label={`${selectedUnit} 단원 선택 해제`}
+                  >
+                    <X size={13} aria-hidden="true" />
+                  </button>
+                </span>
               ))}
-            </datalist>
+            </div>
           ) : null}
-          <span className="field-help">단원명은 직접 입력할 수 있습니다.</span>
-        </label>
+
+          <span className="field-help">단원은 선택하지 않아도 되며, 여러 개를 선택하거나 직접 추가할 수 있습니다.</span>
+        </div>
       </div>
 
       {learningModule ? (
@@ -96,7 +171,7 @@ export function SubjectLearningModuleControls({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-bold text-slate-700">참고 성취기준 미리보기</p>
             <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600">
-              {curriculumSubjectTypeLabels[subjectType]} · 최대 5개
+              {curriculumSubjectTypeLabels[subjectType]} · {selectedUnits.length > 0 ? `선택 단원 ${selectedUnits.length}개` : "단원 전체"} · 최대 5개
             </span>
           </div>
           {previewStandards.length > 0 ? (
@@ -117,7 +192,9 @@ export function SubjectLearningModuleControls({
               ))}
             </div>
           ) : (
-            <p className="mt-3 text-xs font-semibold text-slate-500">선택한 학습모듈의 성취기준이 없습니다.</p>
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              {selectedUnits.length > 0 ? "선택한 단원에 해당하는 성취기준이 없습니다." : "선택한 학습모듈의 성취기준이 없습니다."}
+            </p>
           )}
         </div>
       ) : null}

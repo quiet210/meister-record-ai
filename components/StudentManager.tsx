@@ -6,6 +6,7 @@ import { getFallbackSettingsOptions, loadSettingsOptions, type DepartmentOption 
 import { gradeOptions } from "@/lib/options";
 import { downloadStudentUploadTemplate } from "@/lib/student-template";
 import { createStudent, createStudents, deleteStudents, listStudents, updateStudent, type StudentInput } from "@/lib/students";
+import { sortClassNames, sortStudents } from "@/lib/student-sort";
 import type { Department, Student } from "@/lib/types";
 import { StudentFilter } from "@/components/StudentFilter";
 
@@ -62,10 +63,6 @@ function normalizeDepartment(value: string, departmentOptions: DepartmentOption[
   const compact = normalizeHeader(value);
   const option = departmentOptions.find((item) => normalizeHeader(item.value) === compact || normalizeHeader(item.label) === compact);
   return option?.value || null;
-}
-
-function sortClassNames(values: string[]) {
-  return [...values].sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
 }
 
 async function parseStudentExcelFile(file: File, departmentOptions: DepartmentOption[]) {
@@ -218,7 +215,7 @@ export function StudentManager() {
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return gradeDepartmentStudents.filter((student) => !normalizedQuery || student.name.toLowerCase().includes(normalizedQuery));
+    return sortStudents(gradeDepartmentStudents.filter((student) => !normalizedQuery || student.name.toLowerCase().includes(normalizedQuery)));
   }, [gradeDepartmentStudents, query]);
 
   const visibleStudentCount = hasStudentListFilters ? filteredStudents.length : 0;

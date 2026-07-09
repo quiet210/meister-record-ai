@@ -30,10 +30,12 @@ type UseSubjectLearningModuleInput = {
   enabled?: boolean;
   subjectName: string;
   curriculumSubjects: SettingsSubjectOption[];
+  units: string[];
   setUnit: Dispatch<SetStateAction<string>>;
+  setUnits: Dispatch<SetStateAction<string[]>>;
 };
 
-export function useSubjectLearningModule({ enabled = true, subjectName, curriculumSubjects, setUnit }: UseSubjectLearningModuleInput) {
+export function useSubjectLearningModule({ enabled = true, subjectName, curriculumSubjects, units, setUnit, setUnits }: UseSubjectLearningModuleInput) {
   const [learningModule, setLearningModule] = useState("");
   const [standards, setStandards] = useState<CurriculumStandard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -52,6 +54,8 @@ export function useSubjectLearningModule({ enabled = true, subjectName, curricul
     setLearningModule("");
     setStandards([]);
     setError("");
+    setUnit("");
+    setUnits([]);
   }, [normalizedSubjectName]);
 
   useEffect(() => {
@@ -96,15 +100,23 @@ export function useSubjectLearningModule({ enabled = true, subjectName, curricul
     [normalizedLearningModule, standards]
   );
   const unitOptions = useMemo(() => uniqueNonEmptyValues(moduleStandards.map((standard) => standard.unitName)), [moduleStandards]);
-  const previewStandards = useMemo(() => moduleStandards.slice(0, 5), [moduleStandards]);
-  const unitOptionsKey = unitOptions.join("\u001f");
+  const selectedUnitSet = useMemo(() => new Set(units.map(normalizeLookupValue).filter(Boolean)), [units]);
+  const previewStandards = useMemo(
+    () =>
+      selectedUnitSet.size > 0
+        ? moduleStandards.filter((standard) => selectedUnitSet.has(normalizeLookupValue(standard.unitName))).slice(0, 5)
+        : moduleStandards.slice(0, 5),
+    [moduleStandards, selectedUnitSet]
+  );
   const learningModuleOptionsKey = learningModuleOptions.join("\u001f");
 
   useEffect(() => {
     if (!isNcsSubject && learningModule) {
       setLearningModule("");
+      setUnit("");
+      setUnits([]);
     }
-  }, [isNcsSubject, learningModule]);
+  }, [isNcsSubject, learningModule, setUnit, setUnits]);
 
   useEffect(() => {
     if (!learningModule || learningModuleOptions.length === 0) return;
@@ -114,9 +126,9 @@ export function useSubjectLearningModule({ enabled = true, subjectName, curricul
   }, [learningModule, learningModuleOptions.length, learningModuleOptionsKey]);
 
   useEffect(() => {
-    if (!learningModule || unitOptions.length !== 1) return;
-    setUnit(unitOptions[0]);
-  }, [learningModule, setUnit, unitOptions.length, unitOptionsKey]);
+    setUnit("");
+    setUnits([]);
+  }, [normalizedLearningModule, setUnit, setUnits]);
 
   return {
     learningModule,
