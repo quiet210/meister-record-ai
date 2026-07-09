@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpenText, ClipboardCheck, Factory, Settings } from "lucide-react";
+import { BookOpenText, ClipboardCheck, Factory, School, Settings } from "lucide-react";
 
 const adminLinks = [
   {
@@ -19,6 +19,12 @@ const adminLinks = [
     title: "체크리스트 관리",
     description: "과세특 활동유형/역량과 행동특성 체크 항목을 관리합니다.",
     icon: ClipboardCheck
+  },
+  {
+    href: "/admin/school-requests",
+    title: "학교 변경 요청",
+    description: "소속학교 변경 요청을 확인하고 승인 또는 반려합니다.",
+    icon: School
   }
 ];
 

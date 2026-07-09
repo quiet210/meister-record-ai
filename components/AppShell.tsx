@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpenCheck, BookOpenText, ClipboardList, FileText, PenLine, Settings, UsersRound, type LucideIcon } from "lucide-react";
+import { BookOpenCheck, BookOpenText, ClipboardList, FileText, PenLine, Settings, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ensureUserProfile } from "@/lib/students";
 
@@ -20,13 +20,14 @@ const navItems: NavItem[] = [
   { href: "/students", label: "학생 관리", icon: UsersRound },
   { href: "/student-records", label: "학생부 관리", icon: FileText },
   { href: "/admin/curriculum", label: "과목/성취기준", icon: BookOpenText },
+  { href: "/account", label: "회원정보", icon: UserRound },
 ];
 
 const adminNavItem: NavItem = {
   href: "/admin",
   label: "관리자",
   icon: Settings,
-  activeHrefs: ["/admin/departments", "/admin/subjects", "/admin/checklists"]
+  activeHrefs: ["/admin/departments", "/admin/subjects", "/admin/checklists", "/admin/school-requests"]
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
