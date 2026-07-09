@@ -11,6 +11,8 @@
 ### 주요 기능
 
 - 회원가입과 로그인
+- 회원정보 조회와 비밀번호 변경
+- 소속학교 변경 요청과 관리자 승인
 - 학생 CRUD
 - 학생 엑셀 업로드와 템플릿 다운로드
 - 과목 관리
@@ -45,6 +47,11 @@
 - `public.users` 프로필과 Supabase Auth 사용자 연결
 - `admin`, `teacher` role 기반 권한 분리
 - 일반 사용자는 본인 프로필만 조회하고, 관리자는 같은 학교 사용자 프로필과 role만 관리
+- `/account` 회원정보 페이지에서 이름, 이메일, 현재 `school_id`, role, 가입일, 최근 수정일 조회
+- Supabase Auth `updateUser({ password })` 기반 비밀번호 변경
+- 비밀번호 변경 전 현재 비밀번호를 `signInWithPassword`로 재확인하고, 변경 후 세션 유지 여부 표시
+- 일반 사용자는 `users.school_id`를 직접 수정하지 않고 `school_change_requests`에 소속학교 변경 요청만 생성
+- 승인 전까지 사용자는 기존 `users.school_id` 기준 학교 데이터만 계속 조회
 
 ### 학생 관리
 
@@ -196,6 +203,8 @@
 - 학과 관리
 - 과목/성취기준 관리
 - 체크리스트 관리
+- 학교 변경 요청 관리
+- pending 학교 변경 요청 승인/반려
 - 과세특 활동유형/역량키워드/보완점 관리
 - 행동특성 생활태도/협업/리더십/책임감/안전의식/직업윤리 계열 항목 관리
 - DB 설정값 우선 사용, 없으면 `lib/options.ts` fallback 사용
@@ -208,6 +217,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 
 - `app/login`: 로그인/회원가입
 - `app/dashboard`: 작업 진입 대시보드
+- `app/account`: 회원정보, 비밀번호 변경, 소속학교 변경 요청
 - `app/subject-comment`: 과세특 단일 생성
 - `app/behavior-comment`: 행동특성 단일 생성
 - `app/bulk-subject-comment`: 과세특 일괄 생성
@@ -219,6 +229,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `app/admin/curriculum`: 과목/성취기준 관리
 - `app/admin/departments`: 학과 관리
 - `app/admin/checklists`: 체크리스트 관리
+- `app/admin/school-requests`: 학교 변경 요청 승인/반려
 - `app/api/generate/subject-comment`: 과세특 생성 API
 - `app/api/generate/behavior-comment`: 행동특성 생성 API
 - `app/api/curriculum/upload`: 성취기준 업로드 저장 API, 과목 자동 등록과 성취기준 upsert 처리
@@ -237,10 +248,11 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `BulkBehaviorCommentComposer`: 행특 일괄 생성
 - `BulkDraftLifecycleEditor`: 일괄 생성 결과 lifecycle 편집
 - `GeneratedResultCard`: 단일 생성 결과 편집/저장/확정 카드
+- `AccountManager`: 회원정보, 비밀번호 변경, 소속학교 변경 요청
 - `StudentManager`: 학생 CRUD와 엑셀 업로드, 학과/학년/반 선택 기반 목록 표시
 - `StudentRecordCenter`: 학생별 학생부 관리
 - `CurriculumManager`: 과목/성취기준 관리
-- `AdminChecklistManager`, `AdminDepartmentManager`: 관리자 설정
+- `AdminChecklistManager`, `AdminDepartmentManager`, `AdminSchoolChangeRequests`: 관리자 설정과 학교 변경 요청 관리
 - `AppShell`: 공통 앱 레이아웃
 
 ### lib/
@@ -256,6 +268,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `record-drafts.ts`: `record_drafts` 저장, 수정, 최종 확정/해제
 - `student-records.ts`: 학생별 학생부 조회
 - `students.ts`: 학생 CRUD와 프로필 보조 로직
+- `account.ts`: 회원정보, 비밀번호 변경, 학교 변경 요청, 관리자 승인 RPC 호출
 - `admin-settings.ts`: 관리자 설정 로딩과 fallback 구성
 - `generate-api-client.ts`, `generate-api-auth.ts`: 생성 API 로그인 토큰 전달과 서버 측 학교/학생 소속 검증
 - `export-results.ts`: 과세특/행특 엑셀 다운로드
@@ -279,6 +292,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `migrations/20260703_curriculum_upload_auto_subjects.sql`: 성취기준 업로드 upsert용 중복 방지 인덱스와 과목명 정규화 조회 인덱스
 - `migrations/20260706_record_drafts_current_versions.sql`: `record_drafts` 현재본 컬럼, 기준별 current unique index, 기존 데이터 current backfill
 - `migrations/20260708_archive_record_drafts_on_student_delete.sql`: 학생 삭제 전 학생부 초안 archive와 삭제 학생 스냅샷 보존 trigger
+- `migrations/20260709_school_change_requests.sql`: 학교 변경 요청 테이블, RLS, 승인/반려 보안 함수
 
 ## 4. 주요 화면
 
@@ -287,6 +301,16 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - 경로: `/login`
 - Supabase Auth 기반 로그인/회원가입
 - 사용자 이름과 학교 ID 저장
+
+### 회원정보
+
+- 경로: `/account`
+- 이름, 이메일, 현재 소속학교 `school_id`, role, 가입일, 최근 수정일 표시
+- 현재 비밀번호 재확인 후 새 비밀번호로 변경
+- 비밀번호 변경 성공/실패와 세션 유지 여부 표시
+- 변경 희망 학교 ID 또는 학교명과 요청 사유를 입력해 소속학교 변경 요청 생성
+- pending 요청 취소
+- 승인 전에는 `users.school_id`가 바뀌지 않으며 기존 학교 데이터만 계속 사용
 
 ### 대시보드
 
@@ -348,6 +372,9 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - 경로: `/admin`
 - 관리자 설정 진입
 - 학과, 과목/성취기준, 체크리스트 관리
+- `/admin/school-requests`에서 pending 학교 변경 요청 승인/반려
+- 승인 시 `users.school_id`를 요청한 학교 ID로 변경하고 요청 행에 `approved`, `reviewed_by`, `reviewed_at` 기록
+- 반려 시 요청 행에 `rejected`, `reviewed_by`, `reviewed_at` 기록
 
 ## 5. AI 생성 흐름
 
@@ -428,6 +455,7 @@ AI 원본
 - `students`: 같은 학교 사용자만 조회, 추가, 수정, 삭제할 수 있습니다.
 - `curriculum_subjects`, `curriculum_standards`: 같은 학교에서 공유하며, 수동 과목 관리는 관리자 중심으로 유지합니다. 성취기준 업로드 저장 API는 로그인한 teacher/admin의 학교 ID를 확인한 뒤 업로드 파일에 필요한 과목만 자동 등록합니다.
 - `departments`, `checklist_categories`, `checklist_items`: 같은 학교에서 조회하고 관리자는 같은 학교 설정만 수정합니다.
+- `school_change_requests`: 일반 사용자는 본인 요청만 생성/조회하고 pending 요청만 취소할 수 있습니다. 관리자는 같은 학교 사용자의 pending 요청만 조회합니다.
 
 ### 교사 개인 데이터
 
@@ -440,13 +468,16 @@ AI 원본
 
 - 관리자는 같은 학교의 사용자 프로필을 조회하고 role을 수정할 수 있습니다.
 - 관리자는 학교 설정, 과목, 성취기준, 체크리스트를 같은 학교 범위에서 관리합니다.
+- 관리자는 `approve_school_change_request`, `reject_school_change_request` 보안 함수를 통해서만 학교 변경 요청을 처리합니다.
+- 학교 변경 승인 함수는 관리자와 요청자의 현재 `school_id`가 같고 요청이 pending인 경우에만 `users.school_id`를 변경합니다.
 - 관리자 권한은 학생부 원문 조회 권한으로 확장되지 않습니다.
 
 ### 학교 경계
 
 - 사용자의 `public.users.school_id`와 행의 `school_id`가 다르면 학생, 과목, 성취기준, 학교 설정, 학생부 draft에 접근할 수 없습니다.
 - 과세특 생성 API는 클라이언트가 보낸 `schoolId`를 신뢰하지 않고, 로그인 토큰으로 조회한 서버 측 학교 ID만 사용합니다.
-- 선택 학생 ID가 현재 학교 학생이 아니면 생성 API 요청을 거부합니다.
+- 과세특/행동특성 생성 API는 선택 학생 ID가 현재 학교 학생이 아니면 요청을 거부합니다.
+- 일반 사용자는 직접 `users.school_id`를 수정할 update 정책이 없으며, 승인 전 학교 변경 요청은 데이터 접근 범위에 영향을 주지 않습니다.
 
 ## 8. 현재 기술 스택
 
@@ -504,6 +535,11 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 ## 9. 최근 반영 사항
 
+- 회원정보 페이지 추가
+- 비밀번호 변경과 현재 비밀번호 재확인, 변경 후 세션 유지 확인 추가
+- 소속학교 변경 요청 테이블, 요청 생성/취소, 관리자 승인/반려 흐름 추가
+- 일반 사용자의 직접 `school_id` 변경 차단과 승인 전 기존 학교 데이터 유지 흐름 문서화
+- 행특 생성 API에도 현재 학교 학생 소속 검증 적용
 - 과목/성취기준 관리 화면을 조회 기반 UI로 개선
 - 선택 과목 기준 성취기준 조회와 학습모듈별 그룹 표시 적용
 - 학생 조회 UX를 학과 -> 학년 -> 반 구조로 변경하고, 반 선택을 멀티셀렉트 드롭다운으로 유지
