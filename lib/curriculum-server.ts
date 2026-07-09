@@ -40,6 +40,27 @@ function normalizeExactValue(value?: string | null) {
   return (value || "").trim().replace(/\s+/g, " ");
 }
 
+function uniqueNormalizedValues(values: Array<string | undefined | null>) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  values.forEach((value) => {
+    const normalized = normalizeExactValue(value);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    result.push(normalized);
+  });
+
+  return result;
+}
+
+function getSelectedUnits(input: SubjectCurriculumSelectionInput) {
+  const units = uniqueNormalizedValues(Array.isArray(input.units) ? input.units : []);
+  if (units.length > 0) return units;
+
+  return uniqueNormalizedValues([input.unit]);
+}
+
 function normalizeStandard(row: CurriculumStandardRow): CurriculumStandard {
   return {
     id: row.id,
@@ -112,9 +133,9 @@ function phraseMatchScore(candidateText: string, inputValues: Array<string | und
 function scoreCurriculumStandard(standard: CurriculumStandard, input: SubjectCurriculumSelectionInput) {
   const selectedLearningModule = normalizeExactValue(input.learningModule);
   const standardLearningModule = normalizeExactValue(standard.learningModule);
-  const unitInputs = [input.unit];
+  const unitInputs = getSelectedUnits(input);
   const activityInputs = [...(input.activityTypes || []), ...(input.competencies || []), ...(input.improvements || [])];
-  const allInputValues = [input.subjectName, input.learningModule, input.unit, input.observationMemo, ...activityInputs];
+  const allInputValues = [input.subjectName, input.learningModule, ...unitInputs, input.observationMemo, ...activityInputs];
   const allInputTokens = uniqueTokens(allInputValues);
   const unitTokens = uniqueTokens(unitInputs);
   const activityTokens = uniqueTokens(activityInputs);
@@ -160,11 +181,14 @@ function getTodaySeedDate(now = new Date()) {
 }
 
 function buildCurriculumSelectionSeed(input: SubjectCurriculumSelectionInput) {
+  const selectedUnits = getSelectedUnits(input);
+
   return [
     input.selectedStudentId ? `selectedStudentId:${normalizeExactValue(input.selectedStudentId)}` : "",
     input.studentNo ? `student_no:${normalizeExactValue(input.studentNo)}` : "",
     input.studentName ? `studentName:${normalizeExactValue(input.studentName)}` : "",
     input.learningModule ? `learningModule:${normalizeExactValue(input.learningModule)}` : "",
+    selectedUnits.length > 0 ? `units:${selectedUnits.join(",")}` : "",
     `date:${getTodaySeedDate()}`
   ]
     .filter(Boolean)
@@ -251,6 +275,13 @@ function selectCurriculumStandards(standards: CurriculumStandard[], input: Subje
     .map((item) => item.standard);
 }
 
+function filterStandardsByUnits(standards: CurriculumStandard[], units: string[]) {
+  if (units.length === 0) return standards;
+
+  const normalizedUnits = new Set(units.map(normalizeSearchText).filter(Boolean));
+  return standards.filter((standard) => normalizedUnits.has(normalizeSearchText(standard.unitName)));
+}
+
 export async function getCurriculumStandardsBySubject(subjectName: string, options?: GetCurriculumStandardsBySubjectOptions) {
   const normalizedSubjectName = normalizeExactValue(subjectName);
   const schoolId = normalizeExactValue(options?.schoolId || getSchoolId());
@@ -303,6 +334,7 @@ export async function getCurriculumStandardsBySubject(subjectName: string, optio
 export async function selectCurriculumStandardsForSubjectComment(input: SubjectCurriculumSelectionInput) {
   const seed = buildCurriculumSelectionSeed(input);
   const requestedLearningModule = normalizeExactValue(input.learningModule);
+  const requestedUnits = getSelectedUnits(input);
 
   if (requestedLearningModule) {
     const moduleResult = await getCurriculumStandardsBySubject(input.subjectName, {
@@ -311,12 +343,29 @@ export async function selectCurriculumStandardsForSubjectComment(input: SubjectC
     });
 
     if (!moduleResult.error && moduleResult.standards.length > 0) {
+      const unitMatchedStandards = filterStandardsByUnits(moduleResult.standards, requestedUnits);
+      if (requestedUnits.length > 0 && unitMatchedStandards.length > 0) {
+        return {
+          standards: selectCurriculumStandards(unitMatchedStandards, input, seed),
+          totalCount: unitMatchedStandards.length,
+          seed,
+          requestedLearningModule,
+          requestedUnits,
+          usedLearningModule: requestedLearningModule,
+          usedUnits: requestedUnits,
+          fallbackToSubject: false,
+          error: moduleResult.error
+        };
+      }
+
       return {
         standards: selectCurriculumStandards(moduleResult.standards, input, seed),
         totalCount: moduleResult.totalCount,
         seed,
         requestedLearningModule,
+        requestedUnits,
         usedLearningModule: requestedLearningModule,
+        usedUnits: [] as string[],
         fallbackToSubject: false,
         error: moduleResult.error
       };
@@ -333,7 +382,24 @@ export async function selectCurriculumStandardsForSubjectComment(input: SubjectC
       totalCount: result.totalCount,
       seed,
       requestedLearningModule,
+      requestedUnits,
       usedLearningModule: "",
+      usedUnits: [] as string[],
+      fallbackToSubject: Boolean(requestedLearningModule),
+      error: result.error
+    };
+  }
+
+  const unitMatchedStandards = filterStandardsByUnits(result.standards, requestedUnits);
+  if (requestedUnits.length > 0 && unitMatchedStandards.length > 0) {
+    return {
+      standards: selectCurriculumStandards(unitMatchedStandards, input, seed),
+      totalCount: unitMatchedStandards.length,
+      seed,
+      requestedLearningModule,
+      requestedUnits,
+      usedLearningModule: "",
+      usedUnits: requestedUnits,
       fallbackToSubject: Boolean(requestedLearningModule),
       error: result.error
     };
@@ -344,7 +410,9 @@ export async function selectCurriculumStandardsForSubjectComment(input: SubjectC
     totalCount: result.totalCount,
     seed,
     requestedLearningModule,
+    requestedUnits,
     usedLearningModule: "",
+    usedUnits: [] as string[],
     fallbackToSubject: Boolean(requestedLearningModule),
     error: result.error
   };

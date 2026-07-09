@@ -58,6 +58,23 @@ function optionalListLine(label: string, values: string[]) {
   return selectedValues.length > 0 ? `${label}: ${selectedValues.join(", ")}` : "";
 }
 
+function selectedSubjectUnits(payload: Extract<RecordFormPayload, { mode: "subject" }>) {
+  const units = Array.isArray(payload.units) ? payload.units : [];
+  const selectedValues = units.map((value) => value.trim()).filter(Boolean);
+  if (selectedValues.length > 0) return Array.from(new Set(selectedValues));
+
+  const fallbackUnit = payload.unit.trim();
+  return fallbackUnit ? [fallbackUnit] : [];
+}
+
+function optionalSubjectUnitsSection(payload: Extract<RecordFormPayload, { mode: "subject" }>) {
+  const units = selectedSubjectUnits(payload);
+  if (units.length === 0) return "";
+  if (units.length === 1) return optionalTextLine("단원", units[0]);
+
+  return ["[단원]", ...units.map((unit) => `- ${unit}`)].join("\n");
+}
+
 function buildSystemInstruction() {
   return [
     "당신은 대한민국 공업계 고등학교 교사의 학생부 작성 보조자다.",
@@ -160,7 +177,7 @@ function buildSubjectPrompt(payload: Extract<RecordFormPayload, { mode: "subject
     `과목명: ${payload.subjectName}`,
     payload.learningModule ? `[학습모듈]\n${payload.learningModule.trim()}` : "",
     optionalTextLine("교과서", payload.textbook),
-    optionalTextLine("단원", payload.unit),
+    optionalSubjectUnitsSection(payload),
     payload.lengthOption ? `분량: ${payload.lengthOption}` : "",
     payload.writingStyle ? `문체: ${payload.writingStyle}` : "",
     optionalListLine("활동 유형", payload.activityTypes),

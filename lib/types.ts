@@ -38,6 +38,7 @@ export type SubjectRecordFormPayload = {
   learningModule?: string;
   textbook: string;
   unit: string;
+  units?: string[];
   lengthOption?: CommentLength;
   writingStyle?: string;
   activityTypes: string[];

@@ -1,4 +1,5 @@
 import { createSupabaseBrowserClient, getClientDefaultSchoolId } from "@/lib/supabase";
+import { sortStudents } from "@/lib/student-sort";
 import type { Department, Student } from "@/lib/types";
 
 export type StudentInput = {
@@ -215,7 +216,7 @@ export async function listStudents(): Promise<StudentsResult> {
   }
 
   return {
-    students: ((data || []) as StudentRow[]).map(normalizeStudent)
+    students: sortStudents(((data || []) as StudentRow[]).map(normalizeStudent))
   };
 }
 
@@ -322,7 +323,7 @@ export async function createStudents(inputs: StudentInput[]): Promise<StudentsBu
   }
 
   return {
-    students: ((data || []) as StudentRow[]).map(normalizeStudent)
+    students: sortStudents(((data || []) as StudentRow[]).map(normalizeStudent))
   };
 }
 
