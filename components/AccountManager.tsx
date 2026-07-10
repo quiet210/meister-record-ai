@@ -8,10 +8,13 @@ import {
   createSchoolChangeRequest,
   getAccountProfile,
   listMySchoolChangeRequests,
+  SCHOOL_CHANGE_REQUESTS_DISABLED,
+  SCHOOL_CHANGE_REQUESTS_DISABLED_MESSAGE,
   type AccountProfile,
   type SchoolChangeRequest,
   type SchoolChangeRequestStatus
 } from "@/lib/account";
+import { getSchoolName } from "@/lib/schools";
 
 const statusLabels: Record<SchoolChangeRequestStatus, string> = {
   pending: "대기",
@@ -127,6 +130,7 @@ export function AccountManager() {
   }
 
   const hasPendingRequest = requests.some((request) => request.status === "pending");
+  const isSchoolChangeDisabled = SCHOOL_CHANGE_REQUESTS_DISABLED;
 
   return (
     <div className="space-y-5">
@@ -169,8 +173,8 @@ export function AccountManager() {
               <dd className="break-all font-semibold text-slate-950">{profile.email || "-"}</dd>
             </div>
             <div className="space-y-1 p-4">
-              <dt className="text-xs font-semibold uppercase tracking-normal text-slate-500">현재 소속학교 school_id</dt>
-              <dd className="font-semibold text-slate-950">{profile.school_id}</dd>
+              <dt className="text-xs font-semibold uppercase tracking-normal text-slate-500">현재 소속학교</dt>
+              <dd className="font-semibold text-slate-950">{getSchoolName(profile.school_id)}</dd>
             </div>
             <div className="space-y-1 p-4">
               <dt className="text-xs font-semibold uppercase tracking-normal text-slate-500">권한 role</dt>
@@ -246,6 +250,11 @@ export function AccountManager() {
           </span>
           <h2 className="text-lg font-bold text-slate-950">소속학교 변경 요청</h2>
         </div>
+        {isSchoolChangeDisabled ? (
+          <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+            {SCHOOL_CHANGE_REQUESTS_DISABLED_MESSAGE}
+          </p>
+        ) : null}
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <label className="space-y-2">
@@ -255,7 +264,7 @@ export function AccountManager() {
               value={schoolForm.requestedSchoolId}
               onChange={(event) => setSchoolForm((current) => ({ ...current, requestedSchoolId: event.target.value }))}
               placeholder="예: meister-school"
-              disabled={hasPendingRequest}
+              disabled={hasPendingRequest || isSchoolChangeDisabled}
             />
           </label>
           <label className="space-y-2">
@@ -265,7 +274,7 @@ export function AccountManager() {
               value={schoolForm.requestedSchoolName}
               onChange={(event) => setSchoolForm((current) => ({ ...current, requestedSchoolName: event.target.value }))}
               placeholder="예: 한국마이스터고"
-              disabled={hasPendingRequest}
+              disabled={hasPendingRequest || isSchoolChangeDisabled}
             />
           </label>
         </div>
@@ -275,14 +284,20 @@ export function AccountManager() {
             className="input-base min-h-28 resize-y"
             value={schoolForm.reason}
             onChange={(event) => setSchoolForm((current) => ({ ...current, reason: event.target.value }))}
-            disabled={hasPendingRequest}
+            disabled={hasPendingRequest || isSchoolChangeDisabled}
           />
         </label>
 
         <button
           className="primary-button mt-4 w-full sm:w-auto"
           type="button"
-          disabled={isRequestSaving || hasPendingRequest || (!schoolForm.requestedSchoolId.trim() && !schoolForm.requestedSchoolName.trim()) || !schoolForm.reason.trim()}
+          disabled={
+            isRequestSaving ||
+            hasPendingRequest ||
+            isSchoolChangeDisabled ||
+            (!schoolForm.requestedSchoolId.trim() && !schoolForm.requestedSchoolName.trim()) ||
+            !schoolForm.reason.trim()
+          }
           onClick={submitSchoolChangeRequest}
         >
           <Send size={18} aria-hidden="true" />
@@ -299,12 +314,12 @@ export function AccountManager() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClassNames[request.status]}`}>{statusLabels[request.status]}</span>
                     <span className="text-sm font-semibold text-slate-950">
-                      {request.requestedSchoolId || request.requestedSchoolName || "-"}
+                      {getSchoolName(request.requestedSchoolId || request.requestedSchoolName)}
                     </span>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{request.reason}</p>
                   <p className="mt-2 text-xs text-slate-500">
-                    현재 {request.currentSchoolId} · 요청 {formatDateTime(request.createdAt)}
+                    현재 {getSchoolName(request.currentSchoolId)} · 요청 {formatDateTime(request.createdAt)}
                     {request.reviewedAt ? ` · 처리 ${formatDateTime(request.reviewedAt)}` : ""}
                   </p>
                 </div>
