@@ -43,11 +43,11 @@
 ### 회원
 
 - Supabase Auth 기반 회원가입/로그인
-- 회원가입 시 사용자 이름과 학교 ID 저장
+- 회원가입 시 드롭다운에서 활성 학교를 선택하고 내부 학교 코드(`POSCO`) 저장
 - `public.users` 프로필과 Supabase Auth 사용자 연결
 - `admin`, `teacher` role 기반 권한 분리
 - 일반 사용자는 본인 프로필만 조회하고, 관리자는 같은 학교 사용자 프로필과 role만 관리
-- `/account` 회원정보 페이지에서 이름, 이메일, 현재 `school_id`, role, 가입일, 최근 수정일 조회
+- `/account` 회원정보 페이지에서 이름, 이메일, 현재 소속학교명, role, 가입일, 최근 수정일 조회
 - Supabase Auth `updateUser({ password })` 기반 비밀번호 변경
 - 비밀번호 변경 전 현재 비밀번호를 `signInWithPassword`로 재확인하고, 변경 후 세션 유지 여부 표시
 - 일반 사용자는 `users.school_id`를 직접 수정하지 않고 `school_change_requests`에 소속학교 변경 요청만 생성
@@ -56,7 +56,7 @@
 ### 학생 관리
 
 - 학생 목록 조회
-- 학생 조회 결과는 이름 가나다순, 같은 이름은 번호 자연 정렬, 같은 번호는 반 자연 정렬로 표시
+- 학생 조회 결과는 학년, 학과, 반, 번호, 이름 순서로 자연 정렬해 표시
 - 학생 관리 화면 최초 진입 시 목록을 숨기고, 학과, 학년, 반 선택 후 목록 표시
 - 학과/학년/반 필수 필터와 반 멀티셀렉트, 이름 검색 유지
 - 학생 추가, 수정, 삭제
@@ -157,7 +157,7 @@
 - 현재 로그인한 교사의 `record_drafts.user_id`에 해당하는 학생부만 조회
 - 기본 조회는 `is_current = true`인 현재본만 대상으로 하며, 전체 이력 보기는 이후 확장할 수 있도록 구조를 유지
 - 좌측 학생 목록 검색과 공통 `StudentFilter` 기반 학과/학년/반 필터
-- 좌측 학생 목록은 학생 조회 공통 정렬 기준에 따라 이름, 번호, 반 순서로 표시
+- 좌측 학생 목록은 학생 조회 공통 정렬 기준에 따라 학반/번호순으로 표시
 - 학생 목록은 학과, 학년, 반을 선택한 뒤 표시하고, 학생 선택 전에는 우측 상세를 표시하지 않음
 - 우측 학생별 카드형 상세
 - 과세특은 과목별 현재본을 별도 카드로 표시
@@ -297,6 +297,8 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `migrations/20260706_record_drafts_current_versions.sql`: `record_drafts` 현재본 컬럼, 기준별 current unique index, 기존 데이터 current backfill
 - `migrations/20260708_archive_record_drafts_on_student_delete.sql`: 학생 삭제 전 학생부 초안 archive와 삭제 학생 스냅샷 보존 trigger
 - `migrations/20260709_school_change_requests.sql`: 학교 변경 요청 테이블, RLS, 승인/반려 보안 함수
+- `migrations/20260710_migrate_school_id_to_posco.sql`: 다음 단계에서 사용할 POSCO 전환 migration 초안. 현재 운영 반영은 보류
+- `migrations/20260711_unify_operational_subjects_to_abcd123.sql`: POSCO 전환 전 운영 기준 `abcd123`로 `abcd1234` 과목 데이터 통합
 
 ## 4. 주요 화면
 
@@ -304,12 +306,12 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 
 - 경로: `/login`
 - Supabase Auth 기반 로그인/회원가입
-- 사용자 이름과 학교 ID 저장
+- 회원가입 시 활성 학교 드롭다운에서 포항제철공업고등학교를 선택하고 내부 코드 `POSCO` 저장
 
 ### 회원정보
 
 - 경로: `/account`
-- 이름, 이메일, 현재 소속학교 `school_id`, role, 가입일, 최근 수정일 표시
+- 이름, 이메일, 현재 소속학교명, role, 가입일, 최근 수정일 표시
 - 현재 비밀번호 재확인 후 새 비밀번호로 변경
 - 비밀번호 변경 성공/실패와 세션 유지 여부 표시
 - 변경 희망 학교 ID 또는 학교명과 요청 사유를 입력해 소속학교 변경 요청 생성
@@ -479,7 +481,7 @@ AI 원본
 ### 학교 경계
 
 - 사용자의 `public.users.school_id`와 행의 `school_id`가 다르면 학생, 과목, 성취기준, 학교 설정, 학생부 draft에 접근할 수 없습니다.
-- 과세특 생성 API는 클라이언트가 보낸 `schoolId`를 신뢰하지 않고, 로그인 토큰으로 조회한 서버 측 학교 ID만 사용합니다.
+- 과세특/행동특성 생성 API는 클라이언트가 보낸 `schoolId`를 신뢰하지 않고, 로그인 토큰으로 조회한 서버 측 학교 ID만 사용합니다.
 - 과세특/행동특성 생성 API는 선택 학생 ID가 현재 학교 학생이 아니면 요청을 거부합니다.
 - 일반 사용자는 직접 `users.school_id`를 수정할 update 정책이 없으며, 승인 전 학교 변경 요청은 데이터 접근 범위에 영향을 주지 않습니다.
 
@@ -515,12 +517,12 @@ npm run build
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
-NEXT_PUBLIC_DEFAULT_SCHOOL_ID=demo-school
+NEXT_PUBLIC_DEFAULT_SCHOOL_ID=POSCO
 
 SUPABASE_SECRET_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_STORAGE_BUCKET=knowledge-files
-DEFAULT_SCHOOL_ID=demo-school
+DEFAULT_SCHOOL_ID=POSCO
 
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
@@ -539,6 +541,11 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 ## 9. 최근 반영 사항
 
+- POSCO 전환 전 운영 기준 `school_id`를 `abcd123`로 확정하고 `abcd1234` 과목 데이터를 `abcd123`로 통합하는 migration 추가
+- `demo-school` 과목 데이터는 테스트/샘플 데이터로 분리 유지
+- 다음 단계에서 `abcd123` 운영 데이터를 `POSCO` 코드로 전환 예정
+- 베타 학교를 포항제철공업고등학교(`POSCO`)로 고정하고 회원가입 학교 자유입력을 드롭다운으로 변경
+- 기존 포항제철공업고등학교 관련 `school_id`를 `POSCO`로 통합하는 migration 초안은 보류
 - 회원정보 페이지 추가
 - 비밀번호 변경과 현재 비밀번호 재확인, 변경 후 세션 유지 확인 추가
 - 소속학교 변경 요청 테이블, 요청 생성/취소, 관리자 승인/반려 흐름 추가
@@ -546,7 +553,7 @@ GitHub: https://github.com/quiet210/meister-record-ai
 - 행특 생성 API에도 현재 학교 학생 소속 검증 적용
 - 과목/성취기준 관리 화면을 조회 기반 UI로 개선
 - 선택 과목 기준 성취기준 조회와 학습모듈별 그룹 표시 적용
-- 학생 조회 UX를 학과 -> 학년 -> 반 구조로 변경하고, 반 선택을 멀티셀렉트 드롭다운으로 유지하며 학생 목록은 이름/번호/반 기준으로 정렬
+- 학생 조회 UX를 학과 -> 학년 -> 반 구조로 변경하고, 반 선택을 멀티셀렉트 드롭다운으로 유지하며 학생 목록은 학반/번호순으로 정렬
 - 과세특/행동특성 개별작성 학생조회 UX를 일괄작성과 동일한 학과 -> 학년 -> 반 구조로 통일
 - 공통 `StudentFilter`에서 반 선택 해제 시 학생 목록과 입력 테이블이 다시 표시되지 않도록 개선
 - 학생 삭제 시 `record_drafts`를 삭제하지 않고 archive 처리해 `record_drafts_one_current_per_scope_idx` 충돌 방지
