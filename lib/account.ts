@@ -44,6 +44,9 @@ type UserSummaryRow = {
 const requestColumns =
   "id, user_id, current_school_id, requested_school_id, requested_school_name, reason, status, reviewed_by, reviewed_at, created_at, updated_at";
 
+export const SCHOOL_CHANGE_REQUESTS_DISABLED = true;
+export const SCHOOL_CHANGE_REQUESTS_DISABLED_MESSAGE = "현재 베타 테스트 기간에는 다른 학교로 변경할 수 없습니다.";
+
 function normalizeRequest(row: SchoolChangeRequestRow, requester?: UserSummaryRow): SchoolChangeRequest {
   return {
     id: row.id,
@@ -145,6 +148,8 @@ export async function createSchoolChangeRequest(input: {
   requestedSchoolName: string;
   reason: string;
 }): Promise<{ error?: string }> {
+  if (SCHOOL_CHANGE_REQUESTS_DISABLED) return { error: SCHOOL_CHANGE_REQUESTS_DISABLED_MESSAGE };
+
   const result = await getClientAndProfile();
   if ("error" in result) return { error: result.error };
 
