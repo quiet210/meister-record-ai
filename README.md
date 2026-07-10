@@ -50,7 +50,7 @@
 - `/account` 회원정보 페이지에서 이름, 이메일, 현재 소속학교명, role, 가입일, 최근 수정일 조회
 - Supabase Auth `updateUser({ password })` 기반 비밀번호 변경
 - 비밀번호 변경 전 현재 비밀번호를 `signInWithPassword`로 재확인하고, 변경 후 세션 유지 여부 표시
-- 일반 사용자는 `users.school_id`를 직접 수정하지 않고 `school_change_requests`에 소속학교 변경 요청만 생성
+- 베타 기간에는 신규 소속학교 변경 요청 등록을 비활성화하고 기존 요청 이력과 pending 요청 취소만 유지
 - 승인 전까지 사용자는 기존 `users.school_id` 기준 학교 데이터만 계속 조회
 
 ### 학생 관리
@@ -297,8 +297,9 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `migrations/20260706_record_drafts_current_versions.sql`: `record_drafts` 현재본 컬럼, 기준별 current unique index, 기존 데이터 current backfill
 - `migrations/20260708_archive_record_drafts_on_student_delete.sql`: 학생 삭제 전 학생부 초안 archive와 삭제 학생 스냅샷 보존 trigger
 - `migrations/20260709_school_change_requests.sql`: 학교 변경 요청 테이블, RLS, 승인/반려 보안 함수
-- `migrations/20260710_migrate_school_id_to_posco.sql`: 다음 단계에서 사용할 POSCO 전환 migration 초안. 현재 운영 반영은 보류
+- `migrations/20260710_migrate_school_id_to_posco.sql`: POSCO 전환 초기 초안. `demo-school` 등 비운영 값까지 포함하므로 현재 단계에서는 실행하지 않음
 - `migrations/20260711_unify_operational_subjects_to_abcd123.sql`: POSCO 전환 전 운영 기준 `abcd123`로 `abcd1234` 과목 데이터 통합
+- `migrations/20260712_migrate_abcd123_to_posco.sql`: 운영 기준 `abcd123` 데이터만 `POSCO`로 전환하고 `demo-school` 테스트 데이터는 분리 유지
 
 ## 4. 주요 화면
 
@@ -314,7 +315,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - 이름, 이메일, 현재 소속학교명, role, 가입일, 최근 수정일 표시
 - 현재 비밀번호 재확인 후 새 비밀번호로 변경
 - 비밀번호 변경 성공/실패와 세션 유지 여부 표시
-- 변경 희망 학교 ID 또는 학교명과 요청 사유를 입력해 소속학교 변경 요청 생성
+- 베타 기간에는 신규 소속학교 변경 요청 등록을 비활성화하고 안내 메시지 표시
 - pending 요청 취소
 - 승인 전에는 `users.school_id`가 바뀌지 않으며 기존 학교 데이터만 계속 사용
 
@@ -543,12 +544,13 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 - POSCO 전환 전 운영 기준 `school_id`를 `abcd123`로 확정하고 `abcd1234` 과목 데이터를 `abcd123`로 통합하는 migration 추가
 - `demo-school` 과목 데이터는 테스트/샘플 데이터로 분리 유지
-- 다음 단계에서 `abcd123` 운영 데이터를 `POSCO` 코드로 전환 예정
+- 운영 기준 `abcd123`의 사용자, 학생, 과목, 성취기준, 설정, 학생부 draft를 `POSCO` 코드로 전환하는 migration 추가
 - 베타 학교를 포항제철공업고등학교(`POSCO`)로 고정하고 회원가입 학교 자유입력을 드롭다운으로 변경
-- 기존 포항제철공업고등학교 관련 `school_id`를 `POSCO`로 통합하는 migration 초안은 보류
+- 기존 포항제철공업고등학교 관련 `school_id`를 광범위하게 통합하는 `20260710` migration 초안은 실행 대상에서 제외
+- 베타 기간에는 소속학교 변경 요청 신규 등록을 비활성화하고 기존 요청 이력은 유지
 - 회원정보 페이지 추가
 - 비밀번호 변경과 현재 비밀번호 재확인, 변경 후 세션 유지 확인 추가
-- 소속학교 변경 요청 테이블, 요청 생성/취소, 관리자 승인/반려 흐름 추가
+- 소속학교 변경 요청 테이블, 요청 취소, 관리자 승인/반려 흐름 추가
 - 일반 사용자의 직접 `school_id` 변경 차단과 승인 전 기존 학교 데이터 유지 흐름 문서화
 - 행특 생성 API에도 현재 학교 학생 소속 검증 적용
 - 과목/성취기준 관리 화면을 조회 기반 UI로 개선

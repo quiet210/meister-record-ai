@@ -20,7 +20,8 @@
   - Supabase Auth 비밀번호 변경 구현
   - 현재 비밀번호를 `signInWithPassword`로 재확인한 뒤 `updateUser({ password })`로 변경
   - 비밀번호 변경 후 세션 유지 여부 메시지 표시
-  - 소속학교 변경 요청 생성과 pending 요청 취소 구현
+  - 소속학교 변경 요청 이력 조회와 pending 요청 취소 구현
+  - 베타 기간 신규 소속학교 변경 요청 등록 비활성화
   - 승인 전에는 `users.school_id`를 변경하지 않고 기존 학교 데이터 접근 범위 유지
 
 - 학생 CRUD
@@ -197,7 +198,7 @@
   - teacher 성취기준 업로드의 과목 자동 등록은 별도 서버 API에서 로그인 토큰과 school_id를 확인한 뒤 처리
   - 일반 과목 관리 화면의 수동 과목 생성/수정/삭제는 admin 권한 유지
   - `school_change_requests` 테이블과 RLS 추가
-  - 일반 사용자는 본인 학교 변경 요청만 생성/조회하고 pending 요청만 취소 가능
+  - 베타 기간에는 신규 학교 변경 요청 등록을 비활성화하고 기존 요청 조회와 pending 요청 취소만 유지
   - 관리자는 같은 학교 사용자의 pending 학교 변경 요청만 조회
   - 승인/반려는 `approve_school_change_request`, `reject_school_change_request` 보안 함수로 처리
   - 승인 함수는 같은 학교 관리자와 pending 요청만 통과시키고 승인 시에만 `users.school_id` 변경
@@ -290,18 +291,21 @@
   - POSCO 전환 전 운영 기준 `school_id`를 `abcd123`로 확정
   - `abcd1234`의 운영 과목 11건을 `abcd123`로 통합하는 migration 추가
   - `demo-school` 과목 11건은 테스트/샘플 데이터로 분리 유지
-  - 다음 단계에서 `abcd123` 운영 데이터를 `POSCO` 코드로 전환 예정
+  - 운영 기준 `abcd123`의 사용자, 학생, 과목, 성취기준, 학교 설정, 학생부 draft를 `POSCO` 코드로 전환하는 migration 추가
+  - `demo-school`, `abcd1234`, `포철공고` 값은 이번 POSCO 전환 대상에서 제외
   - 베타 학교 옵션을 `lib/schools.ts`로 분리하고 포항제철공업고등학교(`POSCO`)를 활성 학교로 설정
   - 회원가입 학교 자유입력을 드롭다운으로 변경하고 가입 payload의 `school_id`를 `POSCO`로 고정
-  - 기존 포항제철공업고등학교/포항제철공고/포철공고/demo-school/abcd123/abcd1234 계열 `school_id`를 `POSCO`로 통합하는 migration 초안은 보류
+  - 기존 포항제철공업고등학교/포항제철공고/포철공고/demo-school/abcd123/abcd1234 계열 `school_id`를 광범위하게 통합하는 migration 초안은 실행 대상에서 제외
   - 회원정보와 관리자 학교 변경 요청 화면에서 내부 코드 대신 학교명을 표시
   - 행동특성 생성 API도 인증된 사용자 프로필의 학교 ID로 payload를 덮어쓰도록 보강
+  - 베타 기간 학교 변경 요청 신규 등록을 비활성화하고 기존 요청 이력과 취소 흐름은 유지
 
 - 2026-07-09
   - `/account` 회원정보 페이지 추가
   - 비밀번호 변경과 현재 비밀번호 재확인 구현
   - `school_change_requests` migration, RLS, 승인/반려 보안 함수 추가
   - 소속학교 변경 요청 생성/취소와 관리자 승인/반려 화면 추가
+  - 2026-07-10 기준 베타 기간 신규 요청 등록은 비활성화
   - 일반 사용자의 직접 `school_id` 변경 차단 흐름 정리
   - 행동특성 생성 API에도 현재 학교 학생 소속 검증 추가
   - 학생 조회 결과를 학년/학과/반/번호/이름 기준 자연 정렬로 통일
