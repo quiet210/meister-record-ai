@@ -11,6 +11,23 @@ export async function POST(request: Request) {
   const studentAccessError = await assertStudentBelongsToSchool(authResult.supabase, authResult.context, body.selectedStudentId);
   if (studentAccessError) return studentAccessError;
 
-  const result = await generateStudentRecordDraftWithGemini({ ...body, schoolId: authResult.context.schoolId, mode: "behavior" }, "behavior-comment");
+  const payload: BehaviorRecordFormPayload = {
+    mode: "behavior",
+    selectedStudentId: body.selectedStudentId,
+    studentNo: body.studentNo,
+    studentName: body.studentName,
+    grade: body.grade,
+    department: body.department,
+    className: body.className,
+    schoolLifeAreas: body.schoolLifeAreas,
+    industrialAttitudes: body.industrialAttitudes,
+    behaviorImprovements: body.behaviorImprovements,
+    homeroomMemo: body.homeroomMemo,
+    lengthOption: body.lengthOption,
+    writingStyle: body.writingStyle,
+    writingPerspective: body.writingPerspective
+  };
+
+  const result = await generateStudentRecordDraftWithGemini(payload, "behavior-comment");
   return NextResponse.json(result);
 }
