@@ -1,4 +1,5 @@
 import { createSupabaseBrowserClient, getClientDefaultSchoolId } from "@/lib/supabase";
+import { coerceToActiveSchoolCode, getSchoolName } from "@/lib/schools";
 import { sortStudents } from "@/lib/student-sort";
 import type { Department, Student } from "@/lib/types";
 
@@ -134,13 +135,13 @@ export async function ensureUserProfile(): Promise<{ profile?: UserProfile; erro
   }
 
   const metadataSchoolId = typeof authUser.user_metadata?.school_id === "string" ? authUser.user_metadata.school_id.trim() : "";
-  const schoolId = metadataSchoolId || getClientDefaultSchoolId();
+  const schoolId = coerceToActiveSchoolCode(metadataSchoolId || getClientDefaultSchoolId());
   const name = String(authUser.user_metadata?.name || authUser.email?.split("@")[0] || "교사");
   const email = authUser.email || "";
 
   const { error: schoolError } = await supabase.from("schools").upsert({
     id: schoolId,
-    name: schoolId
+    name: getSchoolName(schoolId)
   });
 
   if (schoolError) {
