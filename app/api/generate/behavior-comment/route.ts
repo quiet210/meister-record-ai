@@ -11,6 +11,6 @@ export async function POST(request: Request) {
   const studentAccessError = await assertStudentBelongsToSchool(authResult.supabase, authResult.context, body.selectedStudentId);
   if (studentAccessError) return studentAccessError;
 
-  const result = await generateStudentRecordDraftWithGemini({ ...body, mode: "behavior" }, "behavior-comment");
+  const result = await generateStudentRecordDraftWithGemini({ ...body, schoolId: authResult.context.schoolId, mode: "behavior" }, "behavior-comment");
   return NextResponse.json(result);
 }
