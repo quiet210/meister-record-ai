@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpenCheck, LogIn, UserPlus } from "lucide-react";
-import { createSupabaseBrowserClient, getClientDefaultSchoolId, hasSupabaseBrowserEnv } from "@/lib/supabase";
+import { DEFAULT_SCHOOL_CODE, getActiveSchoolOptions } from "@/lib/schools";
+import { createSupabaseBrowserClient, hasSupabaseBrowserEnv } from "@/lib/supabase";
 
 export function LoginForm() {
   const router = useRouter();
@@ -11,11 +12,12 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [schoolId, setSchoolId] = useState(getClientDefaultSchoolId());
+  const [schoolCode, setSchoolCode] = useState(DEFAULT_SCHOOL_CODE);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const hasEnv = hasSupabaseBrowserEnv();
+  const activeSchoolOptions = getActiveSchoolOptions();
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -40,13 +42,20 @@ export function LoginForm() {
     setMessage("");
 
     if (isSignup) {
+      const selectedSchool = activeSchoolOptions.find((school) => school.code === schoolCode);
+      if (!selectedSchool) {
+        setError("소속학교를 선택하세요.");
+        setIsLoading(false);
+        return;
+      }
+
       const { data, error: signupError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             name: name.trim() || email.split("@")[0],
-            school_id: schoolId.trim() || getClientDefaultSchoolId()
+            school_id: selectedSchool.code
           }
         }
       });
@@ -108,9 +117,19 @@ export function LoginForm() {
               <input className="input-base" value={name} onChange={(event) => setName(event.target.value)} placeholder="교사명" />
             </label>
             <label className="block space-y-2">
-              <span className="field-label">학교 ID</span>
-              <input className="input-base" value={schoolId} onChange={(event) => setSchoolId(event.target.value)} placeholder="예: meister-school" />
+              <span className="field-label">소속학교</span>
+              <select className="input-base" value={schoolCode} onChange={(event) => setSchoolCode(event.target.value)}>
+                <option value="">학교를 선택하세요</option>
+                {activeSchoolOptions.map((school) => (
+                  <option key={school.code} value={school.code}>
+                    {school.name}
+                  </option>
+                ))}
+              </select>
             </label>
+            <p className="rounded-md bg-blue-50 p-3 text-xs leading-5 text-blue-700">
+              현재 베타 테스트는 포항제철공업고등학교 소속 교사를 대상으로 운영됩니다.
+            </p>
           </>
         ) : null}
 
@@ -123,7 +142,7 @@ export function LoginForm() {
           <input className="input-base" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="비밀번호" />
         </label>
 
-        <button className="primary-button w-full" type="submit" disabled={!hasEnv || !email.trim() || !password.trim() || isLoading}>
+        <button className="primary-button w-full" type="submit" disabled={!hasEnv || !email.trim() || !password.trim() || (isSignup && !schoolCode) || isLoading}>
           {isSignup ? <UserPlus size={18} aria-hidden="true" /> : <LogIn size={18} aria-hidden="true" />}
           {isLoading ? "처리 중..." : isSignup ? "계정 만들기" : "로그인"}
         </button>
@@ -138,7 +157,7 @@ export function LoginForm() {
           setMessage("");
         }}
       >
-        {isSignup ? "이미 계정이 있으면 로그인" : "처음 사용하는 학교라면 계정 만들기"}
+        {isSignup ? "이미 계정이 있으면 로그인" : "베타 테스트 대상 교사라면 계정 만들기"}
       </button>
 
       {!hasEnv ? (

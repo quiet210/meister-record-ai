@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, RefreshCw, School, XCircle } from "lucide-react";
 import { listAdminSchoolChangeRequests, reviewSchoolChangeRequest, type SchoolChangeRequest } from "@/lib/account";
+import { getSchoolName } from "@/lib/schools";
 
 function formatDateTime(value?: string) {
   if (!value) return "-";
@@ -103,12 +104,12 @@ export function AdminSchoolChangeRequests() {
                         <p className="mt-1 break-all text-sm text-slate-500">{request.requesterEmail || request.userId}</p>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold text-slate-500">현재 school_id</p>
-                        <p className="mt-1 font-semibold text-slate-950">{request.currentSchoolId}</p>
+                        <p className="text-xs font-semibold text-slate-500">현재 소속학교</p>
+                        <p className="mt-1 font-semibold text-slate-950">{getSchoolName(request.currentSchoolId)}</p>
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-slate-500">요청 학교</p>
-                        <p className="mt-1 font-semibold text-slate-950">{request.requestedSchoolId || "-"}</p>
+                        <p className="mt-1 font-semibold text-slate-950">{getSchoolName(request.requestedSchoolId || request.requestedSchoolName)}</p>
                         {request.requestedSchoolName ? <p className="mt-1 text-sm text-slate-500">{request.requestedSchoolName}</p> : null}
                       </div>
                       <div>
