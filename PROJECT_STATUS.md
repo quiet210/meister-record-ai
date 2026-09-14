@@ -1,6 +1,6 @@
 # Project Status
 
-최종 업데이트: 2026-07-10
+최종 업데이트: 2026-09-14
 
 ## 완료
 
@@ -75,6 +75,8 @@
   - 생성 근거 검색 흐름 준비
   - 과세특 생성 시 학습모듈 우선 성취기준 후보를 생성 프롬프트에 반영
   - Gemini API Tier 1 유료 프로젝트의 기본 생성 모델을 `gemini-3.5-flash-lite`로 변경하고 기존 `GEMINI_API_KEY` 환경변수 구조 유지
+  - Gemini generateContent 응답의 usageMetadata를 파싱해 입력/출력/총 토큰 사용량을 생성 결과의 optional usage 정보로 반환
+  - `gemini-3.5-flash-lite` 모델 단가를 `lib/ai-pricing.ts`에서 관리하고 USD 기준 예상 비용을 계산
 
 - 빌드 안정화
   - `lib/generate-api-client.ts` 누락으로 발생하던 빌드 오류 해결
@@ -199,6 +201,7 @@
   - teacher 성취기준 업로드의 과목 자동 등록은 별도 서버 API에서 로그인 토큰과 school_id를 확인한 뒤 처리
   - 일반 과목 관리 화면의 수동 과목 생성/수정/삭제는 admin 권한 유지
   - `school_change_requests` 테이블과 RLS 추가
+  - `ai_usage_logs` 테이블과 RLS를 추가해 일반 사용자는 본인 로그만, 관리자는 같은 학교 로그만 조회
   - 베타 기간에는 신규 학교 변경 요청 등록을 비활성화하고 기존 요청 조회와 pending 요청 취소만 유지
   - 관리자는 같은 학교 사용자의 pending 학교 변경 요청만 조회
   - 승인/반려는 `approve_school_change_request`, `reject_school_change_request` 보안 함수로 처리
@@ -210,6 +213,12 @@
   - pending 요청 목록, 요청자 이름/이메일, 현재 학교, 요청 학교, 요청 사유 표시
   - 승인 시 요청 학교 ID로 사용자 `school_id` 변경, 요청 상태 `approved`, `reviewed_by`, `reviewed_at` 기록
   - 반려 시 요청 상태 `rejected`, `reviewed_by`, `reviewed_at` 기록
+
+- 관리자 AI 사용량
+  - `/admin/ai-usage` 화면 추가
+  - 기간별 Gemini 요청 수, 성공/실패 수, 입력/출력/총 토큰, 예상 비용 USD/KRW 표시
+  - 과세특/행동특성, 모델별, 교사별 집계와 최근 오류 요약 표시
+  - 표시 비용은 usageMetadata와 등록 단가 기준 예상 비용이며 실제 Google 청구액과 다를 수 있음을 안내
 
 - 엑셀 다운로드
   - 과세특 일괄 생성 결과 다운로드 구현
@@ -278,7 +287,7 @@
 | UI | 97% | 주요 화면 구현 완료, 계정/승인 화면 추가, 버튼 정리 필요 |
 | AI | 94% | Gemini 생성과 학습모듈 기반 성취기준 반영 완료, RAG 고도화 필요 |
 | 학생 관리 | 99% | CRUD, 업로드, 템플릿 완료, 학과/학년/반 조회 UX 적용 |
-| 관리자 | 97% | 학과, 과목/성취기준, 체크리스트, 학교 변경 요청 관리 완료 |
+| 관리자 | 98% | 학과, 과목/성취기준, 체크리스트, 학교 변경 요청, AI 사용량 관리 완료 |
 | Lifecycle | 99% | AI 원본, 수정본, 최종본 흐름 완료, 교사 소유 RLS 강화 |
 | 보안/RLS | 98% | 학생부 개인 소유 정책, 학교 공유 데이터 경계, 학교 변경 승인 정책 적용 |
 | 성능 | 90% | 동시 호출 제한 완료, 대량 화면 1차 최적화 완료 |
@@ -287,6 +296,13 @@
 전체 진행률: 97%
 
 ## 변경 이력
+
+- 2026-09-14
+  - `ai_usage_logs` migration 추가
+  - Gemini generateContent 응답의 usageMetadata를 입력/출력/총 토큰으로 파싱
+  - Gemini 요청 성공/실패를 서버에서 사용량 로그로 저장하되, 로그 저장 실패가 생성 요청을 실패시키지 않도록 처리
+  - `/admin/ai-usage` 관리자 화면에서 기간별 요청 수, 토큰 사용량, 예상 비용, 모델/교사/구분별 집계와 최근 오류 조회
+  - 예상 비용은 `gemini-3.5-flash-lite` 단가와 usageMetadata 기준이며 실제 Google 청구액과 다를 수 있음을 문서화
 
 - 2026-07-10
   - POSCO 전환 전 운영 기준 `school_id`를 `abcd123`로 확정

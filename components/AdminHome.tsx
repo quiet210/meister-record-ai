@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpenText, ClipboardCheck, Factory, School, Settings } from "lucide-react";
+import { BarChart3, BookOpenText, ClipboardCheck, Factory, School, Settings } from "lucide-react";
 
 const adminLinks = [
   {
@@ -25,6 +25,12 @@ const adminLinks = [
     title: "학교 변경 요청",
     description: "소속학교 변경 요청을 확인하고 승인 또는 반려합니다.",
     icon: School
+  },
+  {
+    href: "/admin/ai-usage",
+    title: "AI 사용량",
+    description: "Gemini 생성 요청의 토큰 사용량과 예상 비용을 확인합니다.",
+    icon: BarChart3
   }
 ];
 
@@ -46,7 +52,7 @@ export function AdminHome() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {adminLinks.map((item) => {
           const Icon = item.icon;
           return (

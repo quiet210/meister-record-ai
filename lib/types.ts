@@ -25,6 +25,14 @@ export type RagSource = {
   attributes?: Record<string, string | number | boolean>;
 };
 
+export type AiUsage = {
+  model: string;
+  promptTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedContentTokens?: number;
+};
+
 export type SubjectRecordFormPayload = {
   mode: "subject";
   schoolId?: string;
@@ -71,4 +79,6 @@ export type GenerateResponse = {
   evidence: string[];
   warnings: string[];
   sources?: RagSource[];
+  usage?: AiUsage;
+  errorCode?: string;
 };

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logAiUsage } from "@/lib/ai-usage-server";
 import { assertStudentBelongsToSchool, getGenerateApiAuthContext } from "@/lib/generate-api-auth";
 import { generateStudentRecordDraftWithGemini } from "@/lib/gemini";
 import type { BehaviorRecordFormPayload } from "@/lib/types";
@@ -28,6 +29,30 @@ export async function POST(request: Request) {
     writingPerspective: body.writingPerspective
   };
 
-  const result = await generateStudentRecordDraftWithGemini(payload, "behavior-comment");
-  return NextResponse.json(result);
+  try {
+    const result = await generateStudentRecordDraftWithGemini(payload, "behavior-comment");
+
+    await logAiUsage({
+      context: authResult.context,
+      payload,
+      result,
+      mode: "behavior",
+      studentId: payload.selectedStudentId,
+      requestStatus: result.draft ? "success" : "failed",
+      errorCode: result.errorCode
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    await logAiUsage({
+      context: authResult.context,
+      payload,
+      mode: "behavior",
+      studentId: payload.selectedStudentId,
+      requestStatus: "failed",
+      errorCode: error instanceof Error ? error.name : "unknown"
+    });
+
+    throw error;
+  }
 }

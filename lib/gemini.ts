@@ -1,4 +1,5 @@
-import type { GenerateResponse, RecordFormPayload } from "@/lib/types";
+import { DEFAULT_GEMINI_MODEL, getConfiguredGeminiModel } from "@/lib/ai-pricing";
+import type { AiUsage, GenerateResponse, RecordFormPayload } from "@/lib/types";
 import { collectEvidence, inspectDraft, validatePayload } from "@/lib/guardrails";
 
 type GeminiGenerateResponse = {
@@ -12,6 +13,12 @@ type GeminiGenerateResponse = {
   }>;
   promptFeedback?: {
     blockReason?: string;
+  };
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+    cachedContentTokenCount?: number;
   };
   error?: {
     message?: string;
@@ -42,7 +49,7 @@ type GeminiPromptOptions = {
   curriculumStandards?: CurriculumPromptStandard[];
 };
 
-const defaultGeminiModel = "gemini-3.5-flash-lite";
+const defaultGeminiModel = DEFAULT_GEMINI_MODEL;
 const maxGenerationAttempts = 2;
 const minDraftChars = 250;
 const maxDraftChars = 700;
@@ -236,6 +243,46 @@ function buildPrompt(payload: RecordFormPayload, retryInstruction?: string, opti
   return payload.mode === "subject" ? buildSubjectPrompt(payload, retryInstruction, options) : buildBehaviorPrompt(payload, retryInstruction);
 }
 
+function safeTokenCount(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+}
+
+function emptyGeminiUsage(model: string): AiUsage {
+  return {
+    model,
+    promptTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cachedContentTokens: 0
+  };
+}
+
+function extractGeminiUsage(data: GeminiGenerateResponse, model: string): AiUsage {
+  const metadata = data.usageMetadata;
+  const promptTokens = safeTokenCount(metadata?.promptTokenCount);
+  const outputTokens = safeTokenCount(metadata?.candidatesTokenCount);
+  const cachedContentTokens = safeTokenCount(metadata?.cachedContentTokenCount);
+  const totalTokenCount = safeTokenCount(metadata?.totalTokenCount);
+
+  return {
+    model,
+    promptTokens,
+    outputTokens,
+    totalTokens: totalTokenCount || promptTokens + outputTokens + cachedContentTokens,
+    cachedContentTokens
+  };
+}
+
+function addGeminiUsage(current: AiUsage, next: AiUsage): AiUsage {
+  return {
+    model: next.model || current.model,
+    promptTokens: current.promptTokens + next.promptTokens,
+    outputTokens: current.outputTokens + next.outputTokens,
+    totalTokens: current.totalTokens + next.totalTokens,
+    cachedContentTokens: (current.cachedContentTokens || 0) + (next.cachedContentTokens || 0)
+  };
+}
+
 function extractGeminiText(data: GeminiGenerateResponse) {
   const candidates = data.candidates || [];
   const firstCandidateText =
@@ -419,6 +466,7 @@ async function generateCompleteDraftWithModel(apiKey: string, model: string, pay
   const warnings: string[] = [];
   let retryInstruction: string | undefined;
   let lastValidationReasons: string[] = [];
+  let usage = emptyGeminiUsage(model);
 
   for (let attempt = 1; attempt <= maxGenerationAttempts; attempt += 1) {
     const result = await callGeminiModel(apiKey, model, payload, routeName, attempt, retryInstruction, options);
@@ -430,9 +478,12 @@ async function generateCompleteDraftWithModel(apiKey: string, model: string, pay
         model,
         status: result.status,
         message: result.message,
-        warnings
+        warnings,
+        usage
       };
     }
+
+    usage = addGeminiUsage(usage, extractGeminiUsage(result.data, model));
 
     const draft = extractGeminiText(result.data);
     const blockReason = result.data.promptFeedback?.blockReason;
@@ -443,7 +494,8 @@ async function generateCompleteDraftWithModel(apiKey: string, model: string, pay
         failureType: "empty" as const,
         model,
         message: blockReason ? `Gemini 응답이 차단되었습니다: ${blockReason}` : "Gemini 응답에서 초안 텍스트를 찾지 못했습니다.",
-        warnings
+        warnings,
+        usage
       };
     }
 
@@ -469,7 +521,8 @@ async function generateCompleteDraftWithModel(apiKey: string, model: string, pay
         ok: true as const,
         model,
         draft,
-        warnings
+        warnings,
+        usage
       };
     }
 
@@ -483,7 +536,8 @@ async function generateCompleteDraftWithModel(apiKey: string, model: string, pay
     failureType: "invalid" as const,
     model,
     message: `Gemini가 ${maxGenerationAttempts}회 시도 후에도 완결된 250~700자 문장을 반환하지 않았습니다: ${lastValidationReasons.join(", ")}`,
-    warnings
+    warnings,
+    usage
   };
 }
 
@@ -510,7 +564,7 @@ export async function generateStudentRecordDraftWithGemini(
     };
   }
 
-  const requestedModel = process.env.GEMINI_MODEL?.trim() || defaultGeminiModel;
+  const requestedModel = getConfiguredGeminiModel();
   const primaryResult = await generateCompleteDraftWithModel(apiKey, requestedModel, payload, routeName, options);
   const fallbackRequired =
     !primaryResult.ok && primaryResult.failureType === "api" && primaryResult.status === 503 && requestedModel !== defaultGeminiModel;
@@ -532,13 +586,16 @@ export async function generateStudentRecordDraftWithGemini(
           : `Gemini 응답 검증 실패: ${failedModels} 모델에서 완결된 초안을 생성하지 못했습니다.`,
         result.failureType === "api" && result.status ? `상태 코드 ${result.status}: ${result.message}` : result.message,
         "잠시 후 다시 시도하거나 입력 근거를 더 구체적으로 입력해 주세요."
-      ]
+      ],
+      usage: result.usage,
+      errorCode: result.failureType === "api" && result.status ? String(result.status) : result.failureType
     };
   }
 
   return {
     draft: result.draft,
     evidence: collectEvidence(payload),
-    warnings: [...fallbackWarning, ...result.warnings, ...inspectDraft(result.draft)]
+    warnings: [...fallbackWarning, ...result.warnings, ...inspectDraft(result.draft)],
+    usage: result.usage
   };
 }

@@ -27,7 +27,7 @@ const adminNavItem: NavItem = {
   href: "/admin",
   label: "관리자",
   icon: Settings,
-  activeHrefs: ["/admin/departments", "/admin/subjects", "/admin/checklists", "/admin/school-requests"]
+  activeHrefs: ["/admin/departments", "/admin/subjects", "/admin/checklists", "/admin/school-requests", "/admin/ai-usage"]
 };
 
 export function AppShell({ children }: { children: ReactNode }) {

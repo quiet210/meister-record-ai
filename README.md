@@ -29,6 +29,7 @@
 - 학생별 학생부 관리
 - 과세특/행특 결과 엑셀 다운로드
 - 관리자 설정 관리
+- 관리자 AI 사용량과 예상 비용 모니터링
 
 ### 대상 사용자
 
@@ -208,6 +209,7 @@
 - 과목/성취기준 관리
 - 체크리스트 관리
 - 학교 변경 요청 관리
+- AI 사용량과 예상 비용 관리
 - pending 학교 변경 요청 승인/반려
 - 과세특 활동유형/역량키워드/보완점 관리
 - 행동특성 생활태도/협업/리더십/책임감/안전의식/직업윤리 계열 항목 관리
@@ -234,6 +236,7 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `app/admin/departments`: 학과 관리
 - `app/admin/checklists`: 체크리스트 관리
 - `app/admin/school-requests`: 학교 변경 요청 승인/반려
+- `app/admin/ai-usage`: Gemini 사용량과 예상 비용 모니터링
 - `app/api/generate/subject-comment`: 과세특 생성 API
 - `app/api/generate/behavior-comment`: 행동특성 생성 API
 - `app/api/curriculum/upload`: 성취기준 업로드 저장 API, 과목 자동 등록과 성취기준 upsert 처리
@@ -256,14 +259,15 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `StudentManager`: 학생 CRUD와 엑셀 업로드, 학과/학년/반 선택 기반 목록 표시
 - `StudentRecordCenter`: 학생별 학생부 관리
 - `CurriculumManager`: 과목/성취기준 관리
-- `AdminChecklistManager`, `AdminDepartmentManager`, `AdminSchoolChangeRequests`: 관리자 설정과 학교 변경 요청 관리
+- `AdminChecklistManager`, `AdminDepartmentManager`, `AdminSchoolChangeRequests`, `AdminAiUsageDashboard`: 관리자 설정, 학교 변경 요청, AI 사용량 관리
 - `AppShell`: 공통 앱 레이아웃
 
 ### lib/
 
 도메인 로직, API 클라이언트, 생성 프롬프트, 저장 로직이 들어 있습니다.
 
-- `gemini.ts`: Gemini 생성 호출, 프롬프트 구성, 응답 검증
+- `gemini.ts`: Gemini 생성 호출, 프롬프트 구성, 응답 검증, usageMetadata 파싱
+- `ai-pricing.ts`, `ai-usage.ts`, `ai-usage-server.ts`: Gemini 모델 단가, 예상 비용 계산, 사용량 로그 저장과 관리자 집계
 - `guardrails.ts`: 생성 payload 검증, 근거 수집, 금지 표현 검사
 - `rag.ts`: OpenAI Vector Store/RAG 업로드와 검색
 - `openai.ts`: OpenAI 기반 생성 보조 경로
@@ -463,6 +467,7 @@ AI 원본
 - `curriculum_subjects`, `curriculum_standards`: 같은 학교에서 공유하며, 수동 과목 관리는 관리자 중심으로 유지합니다. 성취기준 업로드 저장 API는 로그인한 teacher/admin의 학교 ID를 확인한 뒤 업로드 파일에 필요한 과목만 자동 등록합니다.
 - `departments`, `checklist_categories`, `checklist_items`: 같은 학교에서 조회하고 관리자는 같은 학교 설정만 수정합니다.
 - `school_change_requests`: 일반 사용자는 본인 요청만 생성/조회하고 pending 요청만 취소할 수 있습니다. 관리자는 같은 학교 사용자의 pending 요청만 조회합니다.
+- `ai_usage_logs`: 서버가 Gemini 사용량과 예상 비용을 기록하며, 일반 사용자는 본인 로그만 조회하고 관리자는 같은 학교 로그만 조회합니다.
 
 ### 교사 개인 데이터
 
@@ -478,6 +483,7 @@ AI 원본
 - 관리자는 `approve_school_change_request`, `reject_school_change_request` 보안 함수를 통해서만 학교 변경 요청을 처리합니다.
 - 학교 변경 승인 함수는 관리자와 요청자의 현재 `school_id`가 같고 요청이 pending인 경우에만 `users.school_id`를 변경합니다.
 - 관리자 권한은 학생부 원문 조회 권한으로 확장되지 않습니다.
+- 관리자는 `/admin/ai-usage`에서 같은 학교의 Gemini 요청 수, 토큰 사용량, 실패 요청, 예상 비용을 확인합니다. 비용은 Gemini usageMetadata와 등록된 모델 단가 기준 추정치이며 실제 Google 청구액과 다를 수 있습니다.
 
 ### 학교 경계
 
@@ -519,6 +525,7 @@ npm run build
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 NEXT_PUBLIC_DEFAULT_SCHOOL_ID=POSCO
+NEXT_PUBLIC_AI_COST_USD_KRW=1400
 
 SUPABASE_SECRET_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
@@ -527,6 +534,7 @@ DEFAULT_SCHOOL_ID=POSCO
 
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.5-flash-lite
+AI_COST_USD_KRW=1400
 
 OPENAI_API_KEY=
 OPENAI_MODEL=
@@ -543,6 +551,8 @@ GitHub: https://github.com/quiet210/meister-record-ai
 ## 9. 최근 반영 사항
 
 - 기본 Gemini 생성 모델을 Tier 1 유료 프로젝트에서 사용하는 `gemini-3.5-flash-lite`로 변경하고, API Key 구조는 기존 `GEMINI_API_KEY` 환경변수 방식을 유지
+- Gemini generateContent 응답의 usageMetadata를 수집하고 `ai_usage_logs`에 요청별 토큰 사용량, 실패 상태, 예상 비용을 서버에서 기록
+- `/admin/ai-usage` 관리자 페이지를 추가해 기간별 요청 수, 토큰, 예상 비용, 모델/교사/구분별 집계와 최근 오류를 같은 학교 범위에서 조회
 - POSCO 전환 전 운영 기준 `school_id`를 `abcd123`로 확정하고 `abcd1234` 과목 데이터를 `abcd123`로 통합하는 migration 추가
 - `demo-school` 과목 데이터는 테스트/샘플 데이터로 분리 유지
 - 운영 기준 `abcd123`의 사용자, 학생, 과목, 성취기준, 설정, 학생부 draft를 `POSCO` 코드로 전환하는 migration 추가
