@@ -526,7 +526,7 @@ SUPABASE_STORAGE_BUCKET=knowledge-files
 DEFAULT_SCHOOL_ID=POSCO
 
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 
 OPENAI_API_KEY=
 OPENAI_MODEL=
@@ -542,6 +542,7 @@ GitHub: https://github.com/quiet210/meister-record-ai
 
 ## 9. 최근 반영 사항
 
+- 기본 Gemini 생성 모델을 Tier 1 유료 프로젝트에서 사용하는 `gemini-3.5-flash-lite`로 변경하고, API Key 구조는 기존 `GEMINI_API_KEY` 환경변수 방식을 유지
 - POSCO 전환 전 운영 기준 `school_id`를 `abcd123`로 확정하고 `abcd1234` 과목 데이터를 `abcd123`로 통합하는 migration 추가
 - `demo-school` 과목 데이터는 테스트/샘플 데이터로 분리 유지
 - 운영 기준 `abcd123`의 사용자, 학생, 과목, 성취기준, 설정, 학생부 draft를 `POSCO` 코드로 전환하는 migration 추가

@@ -42,7 +42,7 @@ type GeminiPromptOptions = {
   curriculumStandards?: CurriculumPromptStandard[];
 };
 
-const fallbackGeminiModel = "gemini-2.5-flash";
+const defaultGeminiModel = "gemini-3.5-flash-lite";
 const maxGenerationAttempts = 2;
 const minDraftChars = 250;
 const maxDraftChars = 700;
@@ -510,17 +510,17 @@ export async function generateStudentRecordDraftWithGemini(
     };
   }
 
-  const requestedModel = process.env.GEMINI_MODEL || fallbackGeminiModel;
+  const requestedModel = process.env.GEMINI_MODEL?.trim() || defaultGeminiModel;
   const primaryResult = await generateCompleteDraftWithModel(apiKey, requestedModel, payload, routeName, options);
   const fallbackRequired =
-    !primaryResult.ok && primaryResult.failureType === "api" && primaryResult.status === 503 && requestedModel !== fallbackGeminiModel;
-  const result = fallbackRequired ? await generateCompleteDraftWithModel(apiKey, fallbackGeminiModel, payload, routeName, options) : primaryResult;
+    !primaryResult.ok && primaryResult.failureType === "api" && primaryResult.status === 503 && requestedModel !== defaultGeminiModel;
+  const result = fallbackRequired ? await generateCompleteDraftWithModel(apiKey, defaultGeminiModel, payload, routeName, options) : primaryResult;
   const fallbackWarning = fallbackRequired
-    ? [`${requestedModel} 모델이 일시적으로 사용할 수 없어 ${fallbackGeminiModel}로 재시도했습니다.`]
+    ? [`${requestedModel} 모델이 일시적으로 사용할 수 없어 ${defaultGeminiModel}로 재시도했습니다.`]
     : [];
 
   if (!result.ok) {
-    const failedModels = fallbackRequired ? `${requestedModel}, ${fallbackGeminiModel}` : result.model;
+    const failedModels = fallbackRequired ? `${requestedModel}, ${defaultGeminiModel}` : result.model;
     return {
       draft: "",
       evidence: collectEvidence(payload),

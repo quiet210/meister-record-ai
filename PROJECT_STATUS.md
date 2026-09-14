@@ -74,6 +74,7 @@
   - 문서 metadata 저장 구조 구현
   - 생성 근거 검색 흐름 준비
   - 과세특 생성 시 학습모듈 우선 성취기준 후보를 생성 프롬프트에 반영
+  - Gemini API Tier 1 유료 프로젝트의 기본 생성 모델을 `gemini-3.5-flash-lite`로 변경하고 기존 `GEMINI_API_KEY` 환경변수 구조 유지
 
 - 빌드 안정화
   - `lib/generate-api-client.ts` 누락으로 발생하던 빌드 오류 해결
