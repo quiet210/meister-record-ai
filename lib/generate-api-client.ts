@@ -1,7 +1,7 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { RecordFormPayload } from "@/lib/types";
 
-export async function postGenerateApi(endpoint: string, payload: RecordFormPayload) {
+export async function postGenerateApi(endpoint: string, payload: RecordFormPayload, options: { signal?: AbortSignal } = {}) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json"
   };
@@ -18,6 +18,7 @@ export async function postGenerateApi(endpoint: string, payload: RecordFormPaylo
   return fetch(endpoint, {
     method: "POST",
     headers,
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: options.signal
   });
 }
