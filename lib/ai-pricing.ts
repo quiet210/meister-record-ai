@@ -12,6 +12,7 @@ export type AiUsageCostEstimate = {
 };
 
 export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
+const supportedGeminiModels = new Set([DEFAULT_GEMINI_MODEL]);
 
 // Google Gemini Developer API paid tier standard pricing, checked 2026-09-14.
 export const AI_MODEL_PRICING_USD: Record<string, AiModelPricing> = {
@@ -34,7 +35,11 @@ function parsePositiveNumber(value: string | undefined) {
 }
 
 export function getConfiguredGeminiModel() {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+  const configuredModel = process.env.GEMINI_MODEL?.trim();
+  if (!configuredModel || supportedGeminiModels.has(configuredModel)) return DEFAULT_GEMINI_MODEL;
+
+  console.warn(`[ai-pricing] Unsupported GEMINI_MODEL ignored. Using ${DEFAULT_GEMINI_MODEL}.`);
+  return DEFAULT_GEMINI_MODEL;
 }
 
 export function getAiModelPricing(model: string) {
