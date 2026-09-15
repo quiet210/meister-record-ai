@@ -1553,9 +1553,10 @@ export function BulkBehaviorCommentComposer() {
           ...current,
           [student.id]: {
             ...(current[student.id] || makeInitialStudentInput()),
-            status: input.status,
+            status: "completed",
             pendingRegeneration: result,
             isRegenerating: false,
+            error: "",
             retryMessage: "",
             savedMessage: "새 AI 결과가 생성되었습니다. 현재 유지 또는 새 결과 사용을 선택하세요."
           }
