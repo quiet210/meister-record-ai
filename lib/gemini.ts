@@ -384,7 +384,10 @@ async function callGeminiModel(
       generationConfig: {
         temperature: 0.2,
         topP: 0.8,
-        maxOutputTokens: 4096
+        maxOutputTokens: 8192,
+        thinkingConfig: {
+          thinkingLevel: "MEDIUM"
+        }
       }
     })
   });
