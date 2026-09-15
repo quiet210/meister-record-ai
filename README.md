@@ -147,7 +147,13 @@
 - 선택 학생에게 값 일괄 적용
 - 이전 학생 값 복사
 - 동시 생성 수 3개 제한
+- 완료되는 즉시 다음 학생을 처리하는 worker pool 방식으로 동시 요청을 최대 3개로 제한
+- Gemini 429 응답은 `Retry-After`를 우선 적용하고, 없으면 5초, 15초, 30초 간격으로 최대 3회 자동 재시도
+- 학생별 대기, 생성 중, 재시도 중, 완료, 실패, 중단 상태와 전체 진행률 표시
+- 생성 중단 시 실행 중 요청과 재시도 대기를 취소하고 완료 결과는 보존
+- 생성 중 새로고침, 탭 닫기, 앱 내부 페이지 이동 경고
 - 실패 학생 재생성
+- 전체 생성 재실행 시 완료 학생을 제외하고, 실패 학생만 재생성할 때 기존 성공 결과와 입력값 유지
 - 중복 의심 학생 선택 재생성
 - 단일 생성 API를 학생별로 재사용
 - 행동특성 및 종합의견 일괄 생성은 학과/학년/반 필수 조회와 반 멀티셀렉트 구조 적용
@@ -278,7 +284,8 @@ Next.js App Router 라우트와 API Route가 들어 있습니다.
 - `students.ts`: 학생 CRUD와 프로필 보조 로직
 - `account.ts`: 회원정보, 비밀번호 변경, 학교 변경 요청, 관리자 승인 RPC 호출
 - `admin-settings.ts`: 관리자 설정 로딩과 fallback 구성
-- `generate-api-client.ts`, `generate-api-auth.ts`: 생성 API 로그인 토큰 전달과 서버 측 학교/학생 소속 검증
+- `generate-api-client.ts`, `generate-api-auth.ts`: 생성 API 로그인 토큰 전달, 요청 취소 신호 지원과 서버 측 학교/학생 소속 검증
+- `bulk-generation-queue.ts`: 일괄 생성 worker pool, 동시성 3 제한, 429 백오프 재시도, 요청 취소 공통 처리
 - `export-results.ts`: 과세특/행특 엑셀 다운로드
 - `student-template.ts`, `curriculum-template.ts`: 엑셀 템플릿 생성
 - `supabase.ts`, `supabase-server.ts`: Supabase 클라이언트
