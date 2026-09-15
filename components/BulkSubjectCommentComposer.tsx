@@ -1,11 +1,17 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Play, RefreshCcw, Sparkles, Square } from "lucide-react";
 import { getFallbackSettingsOptions, loadSettingsOptions, type SettingsOptions } from "@/lib/admin-settings";
+import {
+  BULK_GENERATION_CONCURRENCY,
+  generateWithRateLimitRetry,
+  isBulkGenerationAbortError,
+  runBulkGenerationQueue,
+  type BulkGenerationStatus
+} from "@/lib/bulk-generation-queue";
 import { analyzeDraftSimilarity, getDraftSimilarityStatusMeta, type DraftSimilarityInput, type DraftSimilarityResult } from "@/lib/draft-quality";
 import { downloadSubjectCommentResults, type SubjectCommentResultExportRow } from "@/lib/export-results";
-import { postGenerateApi } from "@/lib/generate-api-client";
 import { gradeOptions } from "@/lib/options";
 import { sortClassNames, sortStudents } from "@/lib/student-sort";
 import {
@@ -24,7 +30,7 @@ import { SubjectLearningModuleControls } from "@/components/SubjectLearningModul
 import { useSubjectLearningModule } from "@/components/useSubjectLearningModule";
 import { StudentFilter } from "@/components/StudentFilter";
 
-type BulkStatus = "waiting" | "queued" | "generating" | "completed" | "failed";
+type BulkStatus = BulkGenerationStatus;
 
 type StudentSubjectInput = {
   activityTypes: string[];
@@ -45,13 +51,13 @@ type StudentSubjectInput = {
   isRegenerating: boolean;
   quality: DraftSimilarityResult | null;
   error: string;
+  retryMessage: string;
   savedMessage: string;
 };
 
 type BulkApplyInput = Pick<StudentSubjectInput, "activityTypes" | "competencies" | "improvements" | "observationMemo">;
 
 const fallbackSettingsOptions = getFallbackSettingsOptions();
-const concurrencyLimit = 3;
 const maxSelectableStudents = 50;
 const selectionLimitMessage = "한 번에 최대 50명까지 선택할 수 있습니다.";
 
@@ -83,6 +89,7 @@ function makeInitialStudentInput(): StudentSubjectInput {
     isRegenerating: false,
     quality: null,
     error: "",
+    retryMessage: "",
     savedMessage: ""
   };
 }
@@ -99,6 +106,13 @@ function makeInitialBulkInput(): BulkApplyInput {
 }
 
 function getStatusMeta(status: BulkStatus) {
+  if (status === "retrying") {
+    return {
+      label: "재시도 중",
+      className: "border-amber-200 bg-amber-50 text-amber-800"
+    };
+  }
+
   if (status === "generating") {
     return {
       label: "생성 중",
@@ -120,6 +134,13 @@ function getStatusMeta(status: BulkStatus) {
     };
   }
 
+  if (status === "cancelled") {
+    return {
+      label: "중단됨",
+      className: "border-slate-300 bg-slate-100 text-slate-700"
+    };
+  }
+
   return {
     label: "대기",
     className: "border-slate-200 bg-slate-50 text-slate-600"
@@ -136,21 +157,6 @@ function hasSubjectGenerationInput(input: StudentSubjectInput) {
 
 function isStudentReady(input: StudentSubjectInput) {
   return hasSubjectGenerationInput(input);
-}
-
-async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
-  let nextIndex = 0;
-  const workerCount = Math.min(limit, items.length);
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (nextIndex < items.length) {
-        const item = items[nextIndex];
-        nextIndex += 1;
-        await worker(item);
-      }
-    })
-  );
 }
 
 function useStableCallback<TArgs extends unknown[], TReturn>(callback: (...args: TArgs) => TReturn) {
@@ -242,7 +248,7 @@ const BulkSubjectStudentRow = memo(function BulkSubjectStudentRow({
   const statusMeta = getStatusMeta(input.status);
   const lifecycleMeta = getRecordDraftLifecycleStatusMeta(input.lifecycleStatus);
   const warnings = getStudentWarnings(input);
-  const isRowGenerating = input.status === "generating" || input.status === "queued";
+  const isRowGenerating = input.status === "generating" || input.status === "queued" || input.status === "retrying";
   const rowReady = isStudentReady(input);
   const rowCompleted = input.status === "completed";
   const rowFinalized = input.lifecycleStatus === "finalized";
@@ -322,9 +328,10 @@ const BulkSubjectStudentRow = memo(function BulkSubjectStudentRow({
       </td>
       <td className="px-3 py-3">
         <span className={`inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${statusMeta.className}`}>
-          {input.status === "generating" ? <Loader2 className="mr-1 animate-spin" size={13} aria-hidden="true" /> : null}
+          {input.status === "generating" || input.status === "retrying" ? <Loader2 className="mr-1 animate-spin" size={13} aria-hidden="true" /> : null}
           {statusMeta.label}
         </span>
+        {input.retryMessage ? <p className="mt-2 text-xs font-semibold leading-5 text-amber-800">{input.retryMessage}</p> : null}
         {input.result?.draft ? (
           <span className={`mt-2 inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-bold ${lifecycleMeta.className}`}>
             <span className={`mr-1 h-2 w-2 rounded-full ${lifecycleMeta.dotClassName}`} aria-hidden="true" />
@@ -496,7 +503,9 @@ export function BulkSubjectCommentComposer() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState("");
+  const [generationStudentIds, setGenerationStudentIds] = useState<string[]>([]);
   const filteredSelectCheckboxRef = useRef<HTMLInputElement | null>(null);
+  const generationControllerRef = useRef<AbortController | null>(null);
   const subjectLearningModule = useSubjectLearningModule({
     subjectName,
     curriculumSubjects: settingsOptions.curriculumSubjects,
@@ -609,8 +618,10 @@ export function BulkSubjectCommentComposer() {
       waiting: 0,
       queued: 0,
       generating: 0,
+      retrying: 0,
       completed: 0,
-      failed: 0
+      failed: 0,
+      cancelled: 0
     };
     let hasRunningStudent = false;
     let readyCount = 0;
@@ -618,7 +629,7 @@ export function BulkSubjectCommentComposer() {
     selectedStudents.forEach((student) => {
       const input = studentInputs[student.id] || emptyStudentSubjectInput;
       counts[input.status] += 1;
-      if (input.status === "queued" || input.status === "generating") hasRunningStudent = true;
+      if (input.status === "queued" || input.status === "generating" || input.status === "retrying" || input.isRegenerating) hasRunningStudent = true;
       if (input.status !== "completed" && input.lifecycleStatus !== "finalized" && isStudentReady(input)) readyCount += 1;
     });
 
@@ -658,6 +669,29 @@ export function BulkSubjectCommentComposer() {
     [duplicateQualityStudents, qualitySelectedStudentIdSet]
   );
   const { statusCounts, isGenerating, readySelectedCount } = selectedInputStats;
+  const generationProgress = useMemo(() => {
+    const targetInputs = generationStudentIds.map((studentId) => studentInputs[studentId] || emptyStudentSubjectInput);
+    const completed = targetInputs.filter((input) => input.status === "completed").length;
+    const failed = targetInputs.filter((input) => input.status === "failed").length;
+    const cancelled = targetInputs.filter((input) => input.status === "cancelled").length;
+    const retrying = targetInputs.filter((input) => input.status === "retrying").length;
+    const generating = targetInputs.filter((input) => input.status === "generating").length;
+    const queued = targetInputs.filter((input) => input.status === "queued").length;
+    const processed = completed + failed + cancelled;
+    const total = targetInputs.length;
+
+    return {
+      total,
+      processed,
+      completed,
+      failed,
+      cancelled,
+      retrying,
+      generating,
+      queued,
+      percentage: total > 0 ? Math.round((processed / total) * 100) : 0
+    };
+  }, [generationStudentIds, studentInputs]);
   const allFilteredSelected = useMemo(
     () => filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIdSet.has(student.id)),
     [filteredStudents, selectedStudentIdSet]
@@ -681,6 +715,32 @@ export function BulkSubjectCommentComposer() {
 
   const selectedCountOverLimit = selectedStudents.length > maxSelectableStudents;
   const canGenerate = hasStudentLookupCriteria && hasSubjectName && readySelectedCount > 0 && !isGenerating && !selectedCountOverLimit;
+
+  useEffect(() => {
+    if (!isGenerating) return;
+
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "현재 학생부를 생성 중입니다. 페이지를 이동하면 남은 생성이 중단될 수 있습니다.";
+    }
+
+    function warnInternalNavigation(event: MouseEvent) {
+      const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(target instanceof HTMLAnchorElement) || target.target === "_blank" || target.href === window.location.href) return;
+      if (window.confirm("현재 학생부를 생성 중입니다. 페이지를 이동하면 남은 생성이 중단될 수 있습니다.")) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    document.addEventListener("click", warnInternalNavigation, true);
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      document.removeEventListener("click", warnInternalNavigation, true);
+    };
+  }, [isGenerating]);
+
+  useEffect(() => () => generationControllerRef.current?.abort(), []);
   const subjectResultExportRows = useMemo<SubjectCommentResultExportRow[]>(
     () =>
       selectedStudents.flatMap((student) => {
@@ -989,6 +1049,8 @@ export function BulkSubjectCommentComposer() {
     targetStudents: Student[],
     options: { includeCompleted?: boolean; includeFinalized?: boolean } = {}
   ) {
+    if (generationControllerRef.current) return;
+
     if (targetStudents.length > maxSelectableStudents) {
       setMessage(selectionLimitMessage);
       return;
@@ -1038,6 +1100,9 @@ export function BulkSubjectCommentComposer() {
       completedSkippedCount > 0 ? `완료 ${completedSkippedCount}명 제외` : "",
       notReadySkippedCount > 0 ? `생성 근거 없는 ${notReadySkippedCount}명 대기` : ""
     ].filter(Boolean);
+    const controller = new AbortController();
+    generationControllerRef.current = controller;
+    setGenerationStudentIds(runnableStudents.map((student) => student.id));
     setMessage(skippedMessages.length > 0 ? `${skippedMessages.join(", ")} 후 생성합니다.` : "");
     setStudentInputs((current) => {
       const next = { ...current };
@@ -1058,30 +1123,37 @@ export function BulkSubjectCommentComposer() {
           isRegenerating: false,
           quality: null,
           error: "",
+          retryMessage: "",
           savedMessage: ""
         };
       });
       return next;
     });
 
-    await runWithConcurrency(runnableStudents, concurrencyLimit, async (student) => {
+    await runBulkGenerationQueue(runnableStudents, async (student) => {
       const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
       const payload = buildPayload(student, input);
 
-      patchStudentInput(student.id, { status: "generating", error: "", savedMessage: "" }, false);
+      patchStudentInput(student.id, { status: "generating", error: "", retryMessage: "", savedMessage: "" }, false);
 
       try {
-        const response = await postGenerateApi("/api/generate/subject-comment", payload);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `생성 API 오류: ${response.status}`);
-        }
-
-        const result = (await response.json()) as GenerateResponse;
-        if (!result.draft) {
-          throw new Error(result.warnings?.join(" ") || "초안을 생성하지 못했습니다.");
-        }
+        const result = await generateWithRateLimitRetry("/api/generate/subject-comment", payload, {
+          signal: controller.signal,
+          onRetry: ({ delayMs }) => {
+            const seconds = Math.max(1, Math.ceil(delayMs / 1_000));
+            patchStudentInput(
+              student.id,
+              {
+                status: "retrying",
+                retryMessage: `Gemini API 요청이 많아 ${seconds}초 후 자동 재시도합니다.`
+              },
+              false
+            );
+          },
+          onRetryStart: () => {
+            patchStudentInput(student.id, { status: "generating", retryMessage: "" }, false);
+          }
+        });
 
         const saveResult = await saveRecordDraft({
           mode: "subject",
@@ -1109,6 +1181,7 @@ export function BulkSubjectCommentComposer() {
               isRegenerating: false,
               quality: null,
               error: `저장 실패: ${saveResult.error}`,
+              retryMessage: "",
               savedMessage: ""
             }
           }));
@@ -1133,6 +1206,7 @@ export function BulkSubjectCommentComposer() {
             isRegenerating: false,
             quality: null,
             error: "",
+            retryMessage: "",
             savedMessage: saveResult.action === "updated" ? "record_drafts 현재본 업데이트 완료" : "record_drafts 현재본 저장 완료"
           }
         }));
@@ -1142,21 +1216,47 @@ export function BulkSubjectCommentComposer() {
           draft: result.draft
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "생성 중 오류가 발생했습니다.";
+        const cancelled = controller.signal.aborted || isBulkGenerationAbortError(error);
+        const message = cancelled ? "생성이 중단되었습니다." : error instanceof Error ? error.message : "생성 중 오류가 발생했습니다.";
         setStudentInputs((current) => ({
           ...current,
           [student.id]: {
             ...(current[student.id] || makeInitialStudentInput()),
-            status: "failed",
+            status: cancelled ? "cancelled" : "failed",
             isSavingDraft: false,
             isRegenerating: false,
             quality: null,
             error: message,
+            retryMessage: "",
             savedMessage: ""
           }
         }));
       }
+    }, {
+      signal: controller.signal,
+      concurrency: BULK_GENERATION_CONCURRENCY,
+      onCancelled: (cancelledStudents) => {
+        setStudentInputs((current) => {
+          const next = { ...current };
+          cancelledStudents.forEach((student) => {
+            next[student.id] = {
+              ...(next[student.id] || makeInitialStudentInput()),
+              status: "cancelled",
+              error: "생성이 중단되었습니다.",
+              retryMessage: ""
+            };
+          });
+          return next;
+        });
+      }
     });
+
+    if (generationControllerRef.current === controller) generationControllerRef.current = null;
+
+    if (controller.signal.aborted) {
+      setMessage("일괄 생성을 중단했습니다. 완료된 결과는 유지되며 중단된 학생은 다시 생성할 수 있습니다.");
+      return;
+    }
 
     const qualitySummary = applyQualityAnalysis(generatedDrafts);
     if (qualitySummary.analyzedCount > 1) {
@@ -1171,6 +1271,10 @@ export function BulkSubjectCommentComposer() {
 
   async function generateSelectedStudents() {
     await generateForStudents(selectedStudents);
+  }
+
+  function stopGeneration() {
+    generationControllerRef.current?.abort();
   }
 
   async function regenerateFailedStudents() {
@@ -1360,6 +1464,8 @@ export function BulkSubjectCommentComposer() {
   }
 
   async function regenerateAiForStudents(targetStudents: Student[], options: { includeFinalized?: boolean } = {}) {
+    if (generationControllerRef.current) return;
+
     if (targetStudents.length > maxSelectableStudents) {
       setMessage(selectionLimitMessage);
       return;
@@ -1384,6 +1490,8 @@ export function BulkSubjectCommentComposer() {
       return;
     }
 
+    const controller = new AbortController();
+    generationControllerRef.current = controller;
     setMessage("새 AI 결과를 생성합니다. 기존 교사 수정본은 유지됩니다.");
     setStudentInputs((current) => {
       const next = { ...current };
@@ -1392,50 +1500,81 @@ export function BulkSubjectCommentComposer() {
           ...(next[student.id] || makeInitialStudentInput()),
           isRegenerating: true,
           pendingRegeneration: null,
+          retryMessage: "",
           savedMessage: ""
         };
       });
       return next;
     });
 
-    await runWithConcurrency(runnableStudents, concurrencyLimit, async (student) => {
+    await runBulkGenerationQueue(runnableStudents, async (student) => {
       const input = inputSnapshot.get(student.id) || makeInitialStudentInput();
       const payload = buildPayload(student, input);
 
       try {
-        const response = await postGenerateApi("/api/generate/subject-comment", payload);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `생성 API 오류: ${response.status}`);
-        }
-
-        const result = (await response.json()) as GenerateResponse;
-        if (!result.draft) {
-          throw new Error(result.warnings?.join(" ") || "새 AI 결과를 생성하지 못했습니다.");
-        }
+        const result = await generateWithRateLimitRetry("/api/generate/subject-comment", payload, {
+          signal: controller.signal,
+          onRetry: ({ delayMs }) => {
+            const seconds = Math.max(1, Math.ceil(delayMs / 1_000));
+            patchStudentInput(student.id, {
+              status: "retrying",
+              retryMessage: `Gemini API 요청이 많아 ${seconds}초 후 자동 재시도합니다.`
+            }, false);
+          },
+          onRetryStart: () => patchStudentInput(student.id, { status: "generating", retryMessage: "" }, false)
+        });
 
         setStudentInputs((current) => ({
           ...current,
           [student.id]: {
             ...(current[student.id] || makeInitialStudentInput()),
+            status: input.status,
             pendingRegeneration: result,
             isRegenerating: false,
+            retryMessage: "",
             savedMessage: "새 AI 결과가 생성되었습니다. 현재 유지 또는 새 결과 사용을 선택하세요."
           }
         }));
       } catch (error) {
-        const message = error instanceof Error ? error.message : "AI 다시 생성 중 오류가 발생했습니다.";
+        const cancelled = controller.signal.aborted || isBulkGenerationAbortError(error);
+        const message = cancelled ? "AI 다시 생성을 중단했습니다. 기존 결과는 유지됩니다." : error instanceof Error ? error.message : "AI 다시 생성 중 오류가 발생했습니다.";
         setStudentInputs((current) => ({
           ...current,
           [student.id]: {
             ...(current[student.id] || makeInitialStudentInput()),
+            status: input.status,
             isRegenerating: false,
+            retryMessage: "",
             savedMessage: message
           }
         }));
       }
+    }, {
+      signal: controller.signal,
+      concurrency: BULK_GENERATION_CONCURRENCY,
+      onCancelled: (cancelledStudents) => {
+        setStudentInputs((current) => {
+          const next = { ...current };
+          cancelledStudents.forEach((student) => {
+            const original = inputSnapshot.get(student.id) || makeInitialStudentInput();
+            next[student.id] = {
+              ...(next[student.id] || makeInitialStudentInput()),
+              status: original.status,
+              isRegenerating: false,
+              retryMessage: "",
+              savedMessage: "AI 다시 생성을 중단했습니다. 기존 결과는 유지됩니다."
+            };
+          });
+          return next;
+        });
+      }
     });
+
+    if (generationControllerRef.current === controller) generationControllerRef.current = null;
+    if (controller.signal.aborted) {
+      setMessage("AI 다시 생성을 중단했습니다. 기존 결과는 유지됩니다.");
+      return;
+    }
 
     setMessage("AI 다시 생성이 끝났습니다. 각 학생별 새 결과 사용 여부를 선택하세요.");
   }
@@ -1653,6 +1792,27 @@ export function BulkSubjectCommentComposer() {
         </div>
       </section>
 
+      {generationProgress.total > 0 ? (
+        <section className="panel p-4" aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <p className="font-bold text-slate-900">
+              {generationProgress.processed} / {generationProgress.total} 처리 완료
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
+              <span>성공 {generationProgress.completed}</span>
+              <span>실패 {generationProgress.failed}</span>
+              <span>재시도 중 {generationProgress.retrying}</span>
+              <span>생성 중 {generationProgress.generating}</span>
+              <span>대기 {generationProgress.queued}</span>
+              {generationProgress.cancelled > 0 ? <span>중단 {generationProgress.cancelled}</span> : null}
+            </div>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded bg-slate-200" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={generationProgress.percentage}>
+            <div className="h-full bg-blue-600 transition-[width] duration-300" style={{ width: `${generationProgress.percentage}%` }} />
+          </div>
+        </section>
+      ) : null}
+
       {loadError ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">{loadError}</div>
       ) : null}
@@ -1782,10 +1942,18 @@ export function BulkSubjectCommentComposer() {
                 {isGenerating ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <Sparkles size={18} aria-hidden="true" />}
                 선택 학생 생성
               </button>
-              <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={!hasStudentLookupCriteria || failedStudents.length === 0 || isGenerating || !hasSubjectName}>
-                <RefreshCcw size={17} aria-hidden="true" />
-                실패만 재생성
-              </button>
+              {isGenerating ? (
+                <button className="secondary-button" type="button" onClick={stopGeneration}>
+                  <Square size={16} fill="currentColor" aria-hidden="true" />
+                  생성 중단
+                </button>
+              ) : null}
+              {failedStudents.length > 0 ? (
+                <button className="secondary-button" type="button" onClick={regenerateFailedStudents} disabled={!hasStudentLookupCriteria || isGenerating || !hasSubjectName}>
+                  <RefreshCcw size={17} aria-hidden="true" />
+                  실패 학생만 다시 생성
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
